@@ -1,0 +1,86 @@
+# Par em ingles de t2-money-0001. DERIVADO do portugues, nunca o contrario.
+id: t2-money-0001-en
+schema_version: 1
+task_version: 1
+
+track: t2_formats
+locale: en-US
+split: public
+difficulty: 2
+tags: [decimal-separator, currency, silent-failure-prone]
+
+pair_id: money-0001
+parity: strict
+parity_notes: >-
+  Apenas o idioma e a convencao numerica correspondente mudam entre as duas
+  versoes. Mesma ferramenta, mesmos argumentos, mesmo valor esperado em
+  centavos, mesma dificuldade, mesmo numero de passos. Nenhuma adaptacao
+  cultural: nao muda moeda nem nome de favorecido.
+  CONTROLE DELIBERADO: os identificadores de ferramenta e de argumento sao
+  mantidos IDENTICOS nas duas versoes (`criar_transferencia`,
+  `valor_centavos`, `favorecido`), em portugues. Traduzi-los mudaria duas
+  coisas ao mesmo tempo e o Delta deixaria de isolar a lingua natural. So a
+  descricao da ferramenta e a mensagem do usuario mudam de idioma.
+generated_from: pt-BR
+
+variant_group: money-sep-01-en
+
+canary_guid: 1c8e5b40-curupira-nao-treinar-neste-dado
+
+context:
+  tools:
+    - name: criar_transferencia
+      description: Creates a bank transfer.
+      parameters:
+        type: object
+        properties:
+          valor_centavos: {type: integer}
+          favorecido: {type: string}
+        required: [valor_centavos, favorecido]
+
+    - name: pedir_esclarecimento
+      description: Use when information is missing to carry out the request safely.
+      parameters:
+        type: object
+        properties:
+          campo_faltante: {type: string}
+          pergunta: {type: string}
+        required: [campo_faltante, pergunta]
+
+    - name: recusar
+      description: Use when the request cannot or should not be carried out.
+      parameters:
+        type: object
+        properties:
+          motivo: {type: string}
+        required: [motivo]
+
+input:
+  user_message: "send a transfer of 1,234.56 to supplier Silva"
+
+expect:
+  kind: tool_call
+  accept:
+    - id: canonica
+      rationale: >-
+        Direct path: the message carries both the amount and the payee, nothing
+        is missing, so a single tool call is the correct behaviour.
+      call_order: any
+      preference_rank: 0
+      calls:
+        - name: criar_transferencia
+          args:
+            valor_centavos: 123456
+            favorecido: "Silva"
+          arg_specs:
+            valor_centavos: {matcher: exact_int}
+            favorecido: {matcher: fuzzy_name, params: {threshold: 0.9}}
+          extra_args: reject
+
+  silent_failure_if:
+    - arg: valor_centavos
+      equals: 123456000
+      label: leu_ponto_como_decimal
+    - arg: valor_centavos
+      equals: 1234
+      label: truncou_centavos

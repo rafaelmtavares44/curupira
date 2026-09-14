@@ -1,0 +1,70 @@
+# Curupira — pre-commit.
+#
+# DECISAO DELIBERADA: todos os hooks de qualidade rodam como `language: system`,
+# usando as versoes PINADAS no pyproject.toml, em vez de repos remotos com `rev`.
+# Motivo: garante que o pre-commit, o CI e a maquina do dev usem exatamente a
+# mesma versao de cada ferramenta. Um `rev` de repo remoto desincroniza disso e
+# vira uma segunda arvore de dependencias nao auditada — que e exatamente a
+# classe de problema da ADR 0002.
+#
+# Requisito: `pip install -e ".[dev]"` antes de `pre-commit install`.
+
+default_install_hook_types: [pre-commit, commit-msg]
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      # PRIMEIRO hook de proposito: `language: system` usa o que estiver no PATH.
+      # Se o commit sair de um shell sem o venv ativo, o mypy que roda pode ser
+      # outro — e passar por engano. Este hook recusa antes de qualquer analise.
+      - id: versoes-das-ferramentas
+        name: ferramentas na versao pinada
+        entry: python scripts/checar_versoes.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: ruff-check
+        name: ruff (lint)
+        entry: ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff (format)
+        entry: ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: mypy
+        name: mypy --strict
+        entry: python -m mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+
+      - id: bandit
+        name: bandit
+        entry: python -m bandit -c pyproject.toml -q -r src
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+
+      - id: detect-secrets
+        name: detect-secrets
+        entry: detect-secrets-hook --baseline .secrets.baseline
+        language: system
+        require_serial: true
+
+      - id: pytest-rapido
+        name: pytest (sem marcadores lentos)
+        entry: python -m pytest -q -m "not lento and not integracao"
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true

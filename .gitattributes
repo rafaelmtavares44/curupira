@@ -1,0 +1,29 @@
+# Normaliza fim de linha: o repositorio guarda LF, o checkout no Windows decide.
+# Sem isso, um clone no Windows pode reescrever tudo em CRLF e o `ruff format
+# --check` do CI (que roda em Linux) passa a acusar o arquivo inteiro.
+* text=auto eol=lf
+
+# Arquivos que TEM que ser LF, sempre.
+*.py      text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.toml    text eol=lf
+*.md      text eol=lf
+*.txt     text eol=lf
+*.ini     text eol=lf
+*.cfg     text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# Script de PowerShell e o unico que prefere CRLF.
+*.ps1     text eol=crlf
+
+# Binarios: nunca normalizar.
+*.png     binary
+*.jpg     binary
+*.pdf     binary
+*.parquet binary
+
+# O dataset e o coracao do projeto: diff legivel importa.
+tasks/**/*.yaml   text eol=lf diff
+suites/**/*.yaml  text eol=lf diff

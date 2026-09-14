@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    # JANELA DE CARENCIA — ver ADR 0002.
+    # Politica do projeto: nenhuma release com menos de 7 dias entra no lockfile.
+    # O Dependabot ganhou suporte nativo a essa janela; CONFIRME O NOME DA CHAVE
+    # na documentacao vigente antes de descomentar. Ate la, a carencia e regra de
+    # revisao humana: PR do Dependabot so e mergeado 7 dias apos a release.
+    #
+    # cooldown:
+    #   default-days: 7
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore(ci)"

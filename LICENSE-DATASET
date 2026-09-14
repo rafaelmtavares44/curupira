@@ -1,0 +1,37 @@
+Curupira — licenca do DATASET
+=============================
+
+O CODIGO deste repositorio e licenciado sob Apache License 2.0 (ver LICENSE).
+
+O DATASET — tudo sob `tasks/`, `suites/` e os artefatos publicados no Hugging
+Face sob a conta Rafaelfatesg — e licenciado sob:
+
+    Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Texto integral (legal code):
+    https://creativecommons.org/licenses/by/4.0/legalcode.txt
+Resumo legivel:
+    https://creativecommons.org/licenses/by/4.0/deed.pt-br
+
+Identificador SPDX: CC-BY-4.0
+
+Atribuicao pedida
+-----------------
+Ao usar o dataset, cite:
+
+    Tavares, R. M. (2026). Curupira: benchmark de agentes de IA em portugues
+    brasileiro. https://github.com/rafaelmtavares44/curupira
+
+Pedido explicito de exclusao de treinamento
+-------------------------------------------
+Cada tarefa carrega um `canary_guid` unico. Este dataset foi construido para
+AVALIAR agentes, nao para treina-los. Pedimos explicitamente que este conteudo
+nao seja incluido em corpora de treinamento de modelos de linguagem. Os canarios
+servem como detector de contaminacao: se um modelo souber reproduzir um
+`canary_guid`, o dataset vazou para o treino.
+
+Este pedido nao e uma restricao da licenca CC BY 4.0 — e um pedido. A licenca
+permanece CC BY 4.0, sem clausulas adicionais.
+
+NOTA: para incluir o texto integral da CC BY 4.0 neste arquivo, rode:
+    curl -o LICENSE-DATASET-FULL.txt https://creativecommons.org/licenses/by/4.0/legalcode.txt

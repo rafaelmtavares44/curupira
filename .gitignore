@@ -1,0 +1,49 @@
+# Segredos — primeira secao de proposito. Ver SECURITY.md.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# Ferramentas
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Artefatos de rodada (resultados brutos ficam fora do git; ver README)
+runs/
+cache/
+*.parquet
+!tasks/**/*.parquet
+
+# OneDrive: esta pasta vive dentro do OneDrive.
+# O venv nunca deve sincronizar (ja ignorado acima, na secao Python).
+
+# Lixo que o pytest deixa quando o rename do cache falha (pasta sincronizada).
+pytest-cache-files-*
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Held-out: nunca, em hipotese alguma, dentro deste repositorio.
+heldout/
+tasks/**/held_out/

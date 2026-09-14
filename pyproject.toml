@@ -1,0 +1,120 @@
+# Curupira — benchmark de agentes de IA em portugues brasileiro.
+# Todas as dependencias sao pinadas por versao exata. A instalacao reprodutivel
+# usa, alem disso, um lockfile com hash (ver docs/adr/0002).
+
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "curupira"
+version = "0.1.0.dev0"
+description = "Benchmark de agentes de IA em portugues brasileiro: tool calling, formatos e documentos brasileiros, seguranca em PT-BR."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Rafael Machado Tavares" }]
+keywords = ["benchmark", "llm", "agents", "tool-calling", "portuguese", "pt-br"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Natural Language :: Portuguese (Brazilian)",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+
+# ADR 0002: litellm NAO entra aqui, nem como extra. Adaptadores sao proprios.
+dependencies = [
+  "pydantic==2.13.5",
+  "typer==0.27.2",
+  "httpx==0.28.1",
+  "polars==1.44.2",
+  "pyyaml==6.0.3",
+  "rich==15.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "pytest-cov==7.1.0",
+  "coverage==7.16.1",
+  "hypothesis==6.168.0",
+  "ruff==0.16.7",
+  "mypy==2.3.1",
+  "bandit==1.9.4",
+  "pip-audit==2.10.1",
+  "pre-commit==4.6.2",
+  "detect-secrets==1.5.0",
+  "types-PyYAML==6.0.12.20260906",
+]
+
+[project.urls]
+Repository = "https://github.com/rafaelmtavares44/curupira"
+Issues = "https://github.com/rafaelmtavares44/curupira/issues"
+
+[project.scripts]
+curupira = "curupira.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/curupira"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/curupira", "tests", "tasks", "suites", "docs", "README.md", "LICENSE", "LICENSE-DATASET"]
+
+# --------------------------------------------------------------------------
+# mypy: modo strict. Nada entra na main com erro.
+# --------------------------------------------------------------------------
+[tool.mypy]
+# Checa contra a MENOR versao suportada, de proposito: assim um uso de API que
+# so existe no 3.12+ e pego aqui, e nao na maquina de quem roda 3.11.
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+warn_no_return = true
+show_error_codes = true
+pretty = true
+files = ["src", "tests", "scripts"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["polars.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# --------------------------------------------------------------------------
+# coverage
+# --------------------------------------------------------------------------
+[tool.coverage.run]
+branch = true
+source = ["curupira"]
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+fail_under = 85
+# ATENCAO: `raise NotImplementedError` e excluido porque o esqueleto da Fase 0
+# e so assinatura. Isso e uma faca de dois gumes: enquanto a exclusao existir,
+# uma funcao esquecida sem implementacao nao derruba a cobertura. Remover esta
+# linha assim que a v0.1 estiver implementada.
+exclude_lines = [
+  "pragma: no cover",
+  "raise NotImplementedError",
+  "if TYPE_CHECKING:",
+  "@overload",
+  "\\.\\.\\.",
+]
+
+# --------------------------------------------------------------------------
+# bandit
+# --------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "build", "dist"]

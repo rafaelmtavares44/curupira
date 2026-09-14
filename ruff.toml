@@ -1,0 +1,52 @@
+# Curupira — configuracao do ruff (lint + format).
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+extend-exclude = [".venv", "build", "dist"]
+
+[lint]
+select = [
+  "F",    # pyflakes
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "I",    # isort
+  "N",    # pep8-naming
+  "UP",   # pyupgrade
+  "B",    # bugbear
+  "A",    # builtins shadowing
+  "C4",   # comprehensions
+  "SIM",  # simplify
+  "RUF",  # ruff-specific
+  "ANN",  # annotations obrigatorias
+  "S",    # bandit via ruff
+  "G",    # logging-format: log e onde segredo vaza
+  "SLF",  # acesso a membro privado
+  "PTH",  # use pathlib
+  "TID",  # tidy imports
+  "ARG",  # argumentos nao usados
+  "PL",   # pylint
+  "TRY",  # tryceratops
+  "D",    # pydocstyle: docstring e requisito do projeto
+]
+ignore = [
+  "D203",   # conflita com D211
+  "D213",   # conflita com D212
+  "D401",   # "imperative mood" nao se aplica bem a docstring em portugues
+  "PLR0913", # numero de argumentos: os modelos de dominio tem muitos campos
+  "TRY003", # mensagens de excecao longas sao legiveis
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["S101", "D100", "D103", "PLR2004", "ANN401", "TRY301"]
+"src/curupira/cli.py" = ["A002"]  # `help` como nome de parametro do Typer
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true

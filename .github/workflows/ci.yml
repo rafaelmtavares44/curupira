@@ -1,0 +1,121 @@
+name: ci
+
+# GATILHO: `pull_request`, NUNCA `pull_request_target`.
+# `pull_request_target` roda com os secrets do repositorio base e com o codigo do
+# PR. Um PR de fork que edite um script de CI viraria comprometimento total.
+# Nenhum job deste arquivo usa secret.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  qualidade:
+    name: qualidade (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # O 3.13 esta aqui porque e a versao de desenvolvimento do autor.
+        # Ambiente de dev diferente do CI e receita para "na minha maquina roda".
+        # O 3.14 entra quando sair de release candidate e as dependencias pinadas
+        # publicarem wheels para ele.
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      # RECOMENDACAO: pinar as actions por SHA, nao por tag. O Dependabot
+      # (github-actions) mantem os SHAs atualizados via PR.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: instalar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: ferramentas na versao pinada
+        run: python scripts/checar_versoes.py
+
+      - name: ruff (lint)
+        run: ruff check --output-format=github .
+
+      - name: ruff (format)
+        run: ruff format --check .
+
+      - name: mypy --strict
+        run: python -m mypy
+
+      - name: pytest
+        run: python -m pytest -m "not integracao"
+
+      - name: cobertura minima
+        run: python -m coverage report --fail-under=85
+
+  seguranca:
+    name: seguranca
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: instalar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: bandit
+        run: python -m bandit -c pyproject.toml -q -r src
+
+      # `--strict` (falhar se algo nao pode ser auditado) e incompativel com o
+      # proprio pacote instalado em modo editavel. O destino correto e auditar o
+      # LOCKFILE COM HASH, nao o ambiente:
+      #   python -m pip_audit --strict --require-hashes -r requirements.lock
+      # Trocar por essa linha no mesmo PR que gerar o lockfile (ver ADR 0002).
+      - name: pip-audit
+        run: python -m pip_audit --skip-editable --progress-spinner off
+
+      - name: detect-secrets (baseline em dia)
+        run: |
+          detect-secrets scan --baseline .secrets.baseline
+          git diff --exit-code .secrets.baseline
+
+  # O job abaixo fica COMENTADO ate `curupira validate` sair do esqueleto.
+  # Um job garantidamente vermelho ensina o time a ignorar o CI, que e pior do
+  # que nao ter o job. Descomentar no mesmo PR que implementar o lint do dataset.
+  #
+  # dataset:
+  #   name: lint do dataset
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
+  #         cache: pip
+  #     - name: instalar
+  #       run: |
+  #         python -m pip install --upgrade pip
+  #         pip install -e ".[dev]"
+  #     - name: validar tarefas e suites
+  #       run: curupira validate --strict
