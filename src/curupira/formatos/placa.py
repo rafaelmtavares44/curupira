@@ -11,12 +11,11 @@ from curupira.core.enums import Corrupcao
 from curupira.formatos.base import Gerado
 
 
-def validar(valor: str, *, aceitar_antiga: bool = True) -> bool:
-    """Valida uma placa.
+def validar(valor: str) -> bool:
+    """Valida uma placa, nos formatos Mercosul e antigo.
 
     Args:
         valor: a placa, com ou sem hífen.
-        aceitar_antiga: se verdadeiro, aceita também `LLL-NNNN`.
 
     Returns:
         `True` se casa com um dos formatos aceitos.

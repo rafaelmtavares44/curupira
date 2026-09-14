@@ -9,7 +9,7 @@ from importlib.metadata import distribution
 import pytest
 
 import curupira
-from curupira.core.hashing import hash_da_tarefa
+from curupira.formatos.cpf import validar as validar_cpf
 
 
 def _todos_os_modulos() -> list[str]:
@@ -32,6 +32,11 @@ def test_nao_ha_litellm_entre_as_dependencias() -> None:
 
 
 def test_stub_falha_alto_e_nao_devolve_valor_errado() -> None:
-    """Um stub tem que estourar, não devolver `None` e contaminar um relatório."""
+    """Um stub tem que estourar, não devolver `None` e contaminar um relatório.
+
+    Aponta de propósito para uma ponta solta ainda aberta. Quando `validar` for
+    implementado na Entrega 2, este teste falha e obriga a escolher outro alvo —
+    ou a apagar o teste, se não sobrar stub nenhum.
+    """
     with pytest.raises(NotImplementedError):
-        hash_da_tarefa(None)  # type: ignore[arg-type]
+        validar_cpf("529.982.247-25")

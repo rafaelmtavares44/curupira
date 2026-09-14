@@ -23,3 +23,16 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(ci)"
+    # MAJOR de action NAO vira PR automatico.
+    #
+    # Motivo, aprendido na pratica: os bumps de actions/checkout 4->7 e
+    # actions/setup-python 5->7 derrubaram o CI assim que o repositorio subiu.
+    # Major de action e breaking change por definicao — muda entrada, saida ou
+    # comportamento de seguranca — e um PR automatico vermelho ensina o time a
+    # ignorar o CI, que e o unico jeito de perder um CI que funciona.
+    #
+    # Minor e patch continuam automaticos, que e onde mora a correcao de
+    # seguranca. Major vira decisao humana: leia o changelog, atualize a mao.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

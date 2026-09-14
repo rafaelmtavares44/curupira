@@ -20,10 +20,17 @@ Duas travas contra abuso, que são o ponto:
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from collections.abc import Mapping, Sequence
+from datetime import UTC, date, datetime
 from pathlib import Path
 
+import yaml
 from pydantic import BaseModel, ConfigDict, Field
+
+from curupira import __version__
+from curupira.core.enums import Locale, Paridade
+from curupira.core.hashing import hash_da_tarefa
+from curupira.core.task import Tarefa
 
 _CFG = ConfigDict(extra="forbid", frozen=True)
 
@@ -45,7 +52,9 @@ class Suite(BaseModel):
     """Uma suíte congelada.
 
     `delta_subset` é a lista explícita dos `pair_id` que entram no Delta PT-BR.
-    Ela é declarada, não derivada: a base do Delta é cota de autoria, não sobra.
+    Ela é derivada no congelamento e **gravada no arquivo**: derivar toda vez
+    deixaria a base do Delta mudar junto com o dataset, que é exatamente o que
+    congelar existe para impedir.
     """
 
     model_config = _CFG
@@ -83,6 +92,73 @@ class Errata(BaseModel):
     entries: tuple[EntradaDeErrata, ...] = ()
 
 
+def congelar(tarefas: Sequence[Tarefa], *, suite_id: str) -> Suite:
+    """Congela um conjunto de tarefas numa suíte.
+
+    O `delta_subset` sai dos pares que realmente qualificam: `parity: strict`,
+    com as duas versões presentes. Um par que não fecha simplesmente não entra —
+    o Delta é calculado sobre o que existe, não sobre o que se pretendia.
+
+    Args:
+        tarefas: as tarefas a congelar.
+        suite_id: o identificador da suíte, ex.: `v0.1`.
+
+    Returns:
+        A suíte congelada.
+
+    Raises:
+        ValueError: se a lista de tarefas estiver vazia.
+    """
+    if not tarefas:
+        msg = "nao da para congelar uma suite vazia"
+        raise ValueError(msg)
+
+    entradas = tuple(
+        EntradaDeSuite(
+            task_id=tarefa.id,
+            task_version=tarefa.task_version,
+            sha256=hash_da_tarefa(tarefa),
+        )
+        for tarefa in sorted(tarefas, key=lambda t: t.id)
+    )
+    return Suite(
+        id=suite_id,
+        frozen_at=datetime.now(UTC),
+        curupira_version=__version__,
+        entries=entradas,
+        delta_subset=_derivar_delta_subset(tarefas),
+    )
+
+
+def _derivar_delta_subset(tarefas: Sequence[Tarefa]) -> tuple[str, ...]:
+    """Pares strict com as duas versões presentes."""
+    por_par: dict[str, set[Locale]] = {}
+    for tarefa in tarefas:
+        if tarefa.parity is Paridade.STRICT and tarefa.pair_id is not None:
+            por_par.setdefault(tarefa.pair_id, set()).add(tarefa.locale)
+    return tuple(
+        sorted(
+            pair_id
+            for pair_id, locales in por_par.items()
+            if locales == {Locale.PT_BR, Locale.EN_US}
+        )
+    )
+
+
+def gravar_suite(suite: Suite, caminho: Path) -> None:
+    """Grava a suíte em YAML.
+
+    Args:
+        suite: a suíte congelada.
+        caminho: o arquivo de destino.
+    """
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    caminho.write_text(
+        yaml.safe_dump(suite.model_dump(mode="json"), sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+
 def carregar_suite(caminho: Path) -> Suite:
     """Carrega uma suíte congelada do disco.
 
@@ -92,7 +168,7 @@ def carregar_suite(caminho: Path) -> Suite:
     Returns:
         A suíte validada.
     """
-    raise NotImplementedError
+    return Suite.model_validate(yaml.safe_load(caminho.read_text(encoding="utf-8")))
 
 
 def carregar_errata(caminho: Path) -> Errata:
@@ -104,23 +180,43 @@ def carregar_errata(caminho: Path) -> Errata:
     Returns:
         A errata validada.
     """
-    raise NotImplementedError
+    return Errata.model_validate(yaml.safe_load(caminho.read_text(encoding="utf-8")))
 
 
-def verificar_suite(suite: Suite, tarefas: dict[str, str]) -> list[str]:
-    """Confere os hashes das tarefas contra os congelados na suíte.
+def verificar_suite(suite: Suite, tarefas: Mapping[str, Tarefa]) -> list[str]:
+    """Confere o dataset atual contra os hashes congelados na suíte.
 
     Se alguém alterar uma tarefa sem subir `task_version`, a rodada **falha** em
     vez de produzir número errado em silêncio.
 
     Args:
         suite: a suíte congelada.
-        tarefas: mapa de `task_id` para hash de conteúdo calculado agora.
+        tarefas: mapa de `task_id` para a tarefa carregada agora.
 
     Returns:
         Lista de mensagens de divergência. Vazia significa suíte íntegra.
     """
-    raise NotImplementedError
+    problemas: list[str] = []
+    for entrada in suite.entries:
+        tarefa = tarefas.get(entrada.task_id)
+        if tarefa is None:
+            problemas.append(f"{entrada.task_id}: esta na suite '{suite.id}' e sumiu do dataset")
+            continue
+        atual = hash_da_tarefa(tarefa)
+        if atual == entrada.sha256:
+            continue
+        if tarefa.task_version == entrada.task_version:
+            problemas.append(
+                f"{entrada.task_id}: conteudo mudou e task_version continua "
+                f"{entrada.task_version}. Isso e edicao silenciosa: suba a versao."
+            )
+        else:
+            problemas.append(
+                f"{entrada.task_id}: a suite congelou a versao {entrada.task_version} "
+                f"e o dataset esta na {tarefa.task_version}. A suite '{suite.id}' roda "
+                "a versao congelada; a nova vai para a proxima suite."
+            )
+    return problemas
 
 
 def suite_esta_morta(suite: Suite, errata: Errata) -> bool:
@@ -133,4 +229,7 @@ def suite_esta_morta(suite: Suite, errata: Errata) -> bool:
     Returns:
         `True` se a fração de tarefas com errata excede `TETO_DE_ERRATA`.
     """
-    raise NotImplementedError
+    afetadas = {entrada.task_id for entrada in errata.entries}
+    # `Suite.entries` tem min_length=1, entao nao ha divisao por zero a defender.
+    congeladas = {entrada.task_id for entrada in suite.entries}
+    return len(afetadas & congeladas) / len(congeladas) > TETO_DE_ERRATA

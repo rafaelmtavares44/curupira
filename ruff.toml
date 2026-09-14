@@ -43,6 +43,16 @@ ignore = [
 [lint.pydocstyle]
 convention = "google"
 
+[lint.isort]
+# EXPLICITO em vez de detectado, de proposito.
+#
+# Sem isto, o ruff adivinha se `tests` e first-party olhando o layout do disco, e
+# a adivinhacao muda entre maquinas e entre versoes do ruff: aqui `tests` caia em
+# third-party, na outra maquina em first-party, e o I001 acusava um arquivo que o
+# outro ruff tinha acabado de formatar. Portao que depende de adivinhacao nao e
+# portao. Mesmo principio do hash canonico: declare, nao infira.
+known-first-party = ["curupira", "tests"]
+
 [lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 

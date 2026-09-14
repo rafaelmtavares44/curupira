@@ -19,3 +19,26 @@ procedimento de colisão e para a razão de NÃO verificarmos contra base real.
 """
 
 from __future__ import annotations
+
+from curupira.core.registry import registrar_validador
+from curupira.formatos import boleto, cep, cnpj, cpf, nfe, pix, placa, telefone
+
+NOMES = ("cpf", "cnpj", "cep", "telefone", "placa", "chave_pix", "linha_digitavel", "chave_nfe")
+"""Inventário declarado dos validadores. O teste confere contra o registro real."""
+
+
+def registrar_validadores() -> None:
+    """Registra os validadores de formato brasileiro no registro global.
+
+    Como os matchers, os nomes são registrados nesta fase e as implementações
+    chegam na Entrega 2. O lint já consegue recusar um `por_validador` que aponte
+    para um validador que não existe.
+    """
+    registrar_validador("cpf", cpf.validar)
+    registrar_validador("cnpj", cnpj.validar)
+    registrar_validador("cep", cep.validar)
+    registrar_validador("telefone", telefone.validar)
+    registrar_validador("placa", placa.validar)
+    registrar_validador("chave_pix", pix.validar)
+    registrar_validador("linha_digitavel", boleto.validar)
+    registrar_validador("chave_nfe", nfe.validar)

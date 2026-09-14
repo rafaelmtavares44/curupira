@@ -39,18 +39,30 @@ def detectar_tipo(valor: str) -> TipoDeChavePix | None:
     raise NotImplementedError
 
 
-def validar(valor: str, tipo: TipoDeChavePix | None = None) -> bool:
-    """Valida uma chave PIX.
+def validar(valor: str) -> bool:
+    """Valida uma chave PIX, inferindo o tipo pelo formato.
 
     A chave de CPF e a de CNPJ são **sem pontuação** — uma chave mascarada é
     inválida, e esse é um erro que modelos cometem com frequência.
 
     Args:
         valor: a chave.
-        tipo: se informado, força a validação como esse tipo.
 
     Returns:
-        `True` se a chave é válida para o tipo.
+        `True` se a chave é válida para algum dos cinco tipos.
+    """
+    raise NotImplementedError
+
+
+def validar_como(valor: str, tipo: TipoDeChavePix) -> bool:
+    """Valida uma chave PIX forçando um tipo específico.
+
+    Args:
+        valor: a chave.
+        tipo: o tipo a assumir.
+
+    Returns:
+        `True` se a chave é válida para esse tipo.
     """
     raise NotImplementedError
 

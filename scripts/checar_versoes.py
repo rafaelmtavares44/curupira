@@ -10,6 +10,7 @@ Roda no pre-commit e no CI. Sem argumento, confere tudo.
 from __future__ import annotations
 
 import re
+import shutil
 import sys
 import tomllib
 from importlib.metadata import PackageNotFoundError, version
@@ -39,8 +40,33 @@ def pins_do_pyproject() -> dict[str, str]:
     return pins
 
 
+def binario_de_fora(nome: str) -> str | None:
+    """Diz se o executavel que o PATH resolve esta fora do ambiente atual.
+
+    ERRO JA COMETIDO, duas vezes: `importlib.metadata.version("ruff")` devolve a
+    versao do PACOTE instalado, mas `ruff` na linha de comando pode resolver para
+    um binario completamente outro, instalado global. O portao passava na etapa
+    das versoes e falhava na etapa seguinte com regras de outra versao — que e o
+    pior tipo de falha, porque a primeira etapa dizia que estava tudo bem.
+
+    Args:
+        nome: nome do executavel.
+
+    Returns:
+        O caminho do binario intruso, ou `None` se estiver tudo certo.
+    """
+    caminho = shutil.which(nome)
+    if caminho is None:
+        return None
+    resolvido = Path(caminho).resolve()
+    prefixo = Path(sys.prefix).resolve()
+    if prefixo in resolvido.parents:
+        return None
+    return str(resolvido)
+
+
 def divergencias() -> list[str]:
-    """Compara o que esta instalado com o que esta pinado.
+    """Compara o que esta instalado, e o que o PATH resolve, com o que esta pinado.
 
     Returns:
         Lista de mensagens. Vazia significa ambiente coerente.
@@ -59,6 +85,14 @@ def divergencias() -> list[str]:
             continue
         if instalado != esperado:
             problemas.append(f"{nome}: instalado {instalado}, pinado {esperado}")
+
+        intruso = binario_de_fora(nome)
+        if intruso is not None:
+            problemas.append(
+                f"{nome}: o PATH resolve para {intruso}, que esta FORA do ambiente "
+                f"({sys.prefix}). O pacote pinado pode ser {esperado} e mesmo assim "
+                "a linha de comando rodar outra versao."
+            )
     return problemas
 
 

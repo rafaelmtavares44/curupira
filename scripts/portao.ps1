@@ -41,11 +41,19 @@ Write-Host "caches em: $cache" -ForegroundColor DarkGray
 
 $etapas = @(
     @{ Nome = "versoes pinadas"; Cmd = { python scripts/checar_versoes.py } }
-    @{ Nome = "ruff (lint)";     Cmd = { ruff check . } }
-    @{ Nome = "ruff (format)";   Cmd = { ruff format --check . } }
+    @{ Nome = "ruff (lint)";     Cmd = { python -m ruff check . } }
+    @{ Nome = "ruff (format)";   Cmd = { python -m ruff format --check . } }
     @{ Nome = "mypy --strict";   Cmd = { python -m mypy } }
     @{ Nome = "bandit";          Cmd = { python -m bandit -c pyproject.toml -q -r src scripts } }
     @{ Nome = "pytest";          Cmd = { python -m pytest -o cache_dir="$cachePytest" } }
+    @{ Nome = "detect-secrets";  Cmd = {
+            # Mesmo comando do CI e do pre-commit. Se o portao local nao roda o
+            # que o CI roda, ele nao e um portao — e uma opiniao.
+            $arquivos = git ls-files
+            if ($LASTEXITCODE -ne 0) { $arquivos = Get-ChildItem -Recurse -File -Exclude "*.pyc" | ForEach-Object FullName }
+            $arquivos | python -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
+        }
+    }
 )
 if (-not $Rapido) {
     $etapas += @{ Nome = "pip-audit"; Cmd = { python -m pip_audit --skip-editable --progress-spinner off } }

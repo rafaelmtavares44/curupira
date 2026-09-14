@@ -8,6 +8,12 @@
 # classe de problema da ADR 0002.
 #
 # Requisito: `pip install -e ".[dev]"` antes de `pre-commit install`.
+#
+# Tudo e invocado por `python -m`, NUNCA pelo nome do executavel. Motivo: o nome
+# no PATH pode resolver para um binario instalado global, de outra versao — e ai
+# o hook de versoes passa (o PACOTE pinado esta instalado) enquanto o lint roda
+# com regras de outra versao. Ja aconteceu; `scripts/checar_versoes.py` agora
+# denuncia, e o `python -m` impede.
 
 default_install_hook_types: [pre-commit, commit-msg]
 fail_fast: false
@@ -27,14 +33,14 @@ repos:
 
       - id: ruff-check
         name: ruff (lint)
-        entry: ruff check --force-exclude
+        entry: python -m ruff check --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true
 
       - id: ruff-format
         name: ruff (format)
-        entry: ruff format --force-exclude
+        entry: python -m ruff format --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true
@@ -57,7 +63,7 @@ repos:
 
       - id: detect-secrets
         name: detect-secrets
-        entry: detect-secrets-hook --baseline .secrets.baseline
+        entry: python -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
         language: system
         require_serial: true
 
