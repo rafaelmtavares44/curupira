@@ -4,7 +4,8 @@ Um teste, várias barreiras, e — o que mais importa — ele pega a regressão 
 contribuidor futuro vai introduzir sem querer. Toda garantia vem com o teste que
 a comprova; esta é a garantia que mais dói perder.
 
-A barreira 5 (cache) ganha seu teste quando o cache for implementado na v0.1.
+A barreira 5 (cache) tem seu teste em `tests/test_cache.py`: a entrada de cache
+guarda só a resposta, e `RespostaCrua` não tem onde encaixar um header.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from curupira.core.enums import CamadaDePontuacao, Desfecho
+from curupira.core.enums import CamadaDePontuacao, Desfecho, Locale, Paridade, Trilha
 from curupira.core.result import IdentidadeDoAgente, RespostaCrua, ResultadoDeRodada
 from curupira.security import (
     MARCA_REDIGIDO,
@@ -119,6 +120,10 @@ def _resultado_minimo() -> ResultadoDeRodada:
         task_version=1,
         task_hash="0" * 64,
         suite_id="v0.1",
+        track=Trilha.T2_FORMATOS,
+        locale=Locale.PT_BR,
+        parity=Paridade.STRICT,
+        pair_id="money-0001",
         agent=IdentidadeDoAgente(
             agent_id="agente-teste",
             model="modelo-teste",

@@ -12,7 +12,6 @@ adapters/google.py::preparar
 adapters/openai.py::completar
 adapters/openai.py::preparar
 cli.py::report
-cli.py::score
 formatos/boleto.py::corromper
 formatos/boleto.py::data_para_fator
 formatos/boleto.py::fator_para_data
@@ -43,7 +42,3 @@ report/delta.py::calcular
 report/delta.py::diferencas_pareadas
 report/delta.py::mcnemar_exato
 report/delta.py::wilcoxon_pareado
-scoring/silent_failure.py::classificar
-scoring/silent_failure.py::houve_abstencao
-scoring/silent_failure.py::houve_hedge
-scoring/silent_failure.py::rotular

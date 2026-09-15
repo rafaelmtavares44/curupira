@@ -7,6 +7,7 @@ import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
+import polars as pl
 import pytest
 import yaml
 from typer.testing import CliRunner
@@ -177,10 +178,9 @@ def test_verify_declara_suite_morta_por_errata(dataset: Path, tmp_path: Path) ->
 
 def test_comandos_ainda_nao_implementados_estouram_alto(tmp_path: Path) -> None:
     """Um stub tem que estourar, não devolver zero e mentir que rodou."""
-    for args in (["score", str(tmp_path)], ["report", str(tmp_path)]):
-        resultado = runner.invoke(app, args)
-        assert resultado.exit_code != 0
-        assert isinstance(resultado.exception, NotImplementedError)
+    resultado = runner.invoke(app, ["report", str(tmp_path)])
+    assert resultado.exit_code != 0
+    assert isinstance(resultado.exception, NotImplementedError)
 
 
 # --------------------------------------------------------------------------
@@ -463,3 +463,92 @@ def test_dataset_real_congela(raiz_do_repo: Path, tmp_path: Path) -> None:
     )
     assert resultado.exit_code == 0, resultado.output
     assert "2 pares strict" in _saida(resultado)
+
+
+# --------------------------------------------------------------------------
+# score
+# --------------------------------------------------------------------------
+
+
+def _rodar(dataset: Path, tmp_path: Path, **extras: str) -> Path:
+    """Congela, roda com o adaptador falso e devolve o diretório da rodada."""
+    comum = _congelar(dataset, tmp_path / "suites")
+    args = [
+        "run",
+        "--suite",
+        "v0.1",
+        "--agent",
+        "ensaio",
+        "--modelo",
+        "falso-1",
+        "--repeticoes",
+        "1",
+        "--saida",
+        str(tmp_path / "runs"),
+        *comum,
+    ]
+    for chave, valor in extras.items():
+        args += [f"--{chave}", valor]
+    resultado = runner.invoke(app, args)
+    assert resultado.exit_code == 0, resultado.output
+    (rodada,) = list((tmp_path / "runs").iterdir())
+    return rodada
+
+
+def test_score_de_ponta_a_ponta(dataset: Path, tmp_path: Path) -> None:
+    """`run` e `score` são etapas separadas, e o score não fala com provedor."""
+    rodada = _rodar(dataset, tmp_path)
+    resultado = runner.invoke(app, ["score", str(rodada), "--tarefas", str(dataset)])
+    assert resultado.exit_code == 0, resultado.output
+
+    pontuado = rodada / "scored.parquet"
+    assert pontuado.is_file()
+    frame = pl.read_parquet(pontuado)
+    assert frame.height == 2
+    assert set(frame["locale"]) == {"pt-BR", "en-US"}
+    assert (rodada / "raw.jsonl").is_file()
+
+
+def test_score_e_reexecutavel(dataset: Path, tmp_path: Path) -> None:
+    """É o que torna "guarde o bruto, agregue tarde" operacional, não slogan.
+
+    Corrigir um matcher custa uma nova rodada deste comando — segundos — em vez
+    de uma rodada paga.
+    """
+    rodada = _rodar(dataset, tmp_path)
+    comum = ["score", str(rodada), "--tarefas", str(dataset)]
+    assert runner.invoke(app, comum).exit_code == 0
+    segunda = runner.invoke(app, comum)
+    assert segunda.exit_code == 0, segunda.output
+    assert pl.read_parquet(rodada / "scored.parquet").height == 2
+
+
+def test_score_recusa_dataset_editado_depois_da_rodada(dataset: Path, tmp_path: Path) -> None:
+    """O pior desfecho possível é um número errado que ninguém questiona."""
+    rodada = _rodar(dataset, tmp_path)
+
+    alvo = next(dataset.glob("*-pt.yaml"))
+    bruto = yaml.safe_load(alvo.read_text(encoding="utf-8"))
+    bruto["difficulty"] = 5
+    alvo.write_text(yaml.safe_dump(bruto, allow_unicode=True), encoding="utf-8")
+
+    resultado = runner.invoke(app, ["score", str(rodada), "--tarefas", str(dataset)])
+    assert resultado.exit_code == 1
+    assert "hash" in _saida(resultado)
+    assert not (rodada / "scored.parquet").exists()
+
+
+def test_score_sem_bruto_recusa(tmp_path: Path) -> None:
+    vazio = tmp_path / "sem-rodada"
+    vazio.mkdir()
+    resultado = runner.invoke(app, ["score", str(vazio)])
+    assert resultado.exit_code == 2
+    assert "bruto nao encontrado" in _saida(resultado)
+
+
+def test_score_recusa_dataset_inexistente(dataset: Path, tmp_path: Path) -> None:
+    rodada = _rodar(dataset, tmp_path)
+    resultado = runner.invoke(
+        app, ["score", str(rodada), "--tarefas", str(tmp_path / "nao-existe")]
+    )
+    assert resultado.exit_code == 2

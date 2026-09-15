@@ -17,7 +17,14 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
-from curupira.core.enums import CamadaDePontuacao, ClasseDeFalha, Desfecho
+from curupira.core.enums import (
+    CamadaDePontuacao,
+    ClasseDeFalha,
+    Desfecho,
+    Locale,
+    Paridade,
+    Trilha,
+)
 
 _CFG = ConfigDict(extra="forbid", frozen=True)
 
@@ -109,6 +116,21 @@ class ResultadoDeRodada(BaseModel):
     suite_id: str
     errata_revision: int = 0
 
+    track: Trilha
+    locale: Locale
+    parity: Paridade
+    pair_id: str | None = None
+    variant_group: str | None = None
+    """O contexto da tarefa viaja junto com o resultado, e não por conveniência.
+
+    O Delta PT-BR pareia por `pair_id` e filtra por `parity`; a consistência de
+    grupo agrupa por `variant_group`. Se esses campos ficassem só no dataset, o
+    agregador teria de recarregá-lo e reconciliar — e reconciliar contra um
+    dataset que mudou desde a rodada é exatamente o erro silencioso que a suíte
+    congelada existe para impedir. Aqui eles são um retrato do que valia quando a
+    resposta foi produzida.
+    """
+
     agent: IdentidadeDoAgente
     repetition: int = Field(ge=0)
 
@@ -124,8 +146,21 @@ class ResultadoDeRodada(BaseModel):
     matched_accept_id: str | None = None
     preference_rank: int | None = None
     silent_failure_label: str | None = None
+    motivo: str = ""
+    """Por que falhou, em texto. Diagnóstico, não nota."""
 
-    raw: RespostaCrua
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    do_cache: bool = False
+
+    raw: RespostaCrua | None = None
+    """A resposta crua **não** é copiada para cá pelo `curupira score`.
+
+    Ela já está em `raw.jsonl`, que é a fonte de verdade e nunca é reescrito.
+    Duplicá-la no arquivo pontuado criaria duas cópias que podem divergir — e a
+    que divergiria é a derivada, que é justamente a que se regenera de graça.
+    O campo existe para quem quiser montar o resultado completo em memória.
+    """
 
 
 class ExecucaoCrua(BaseModel):

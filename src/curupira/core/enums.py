@@ -95,6 +95,20 @@ class Desfecho(StrEnum):
     ERRO_DE_EXECUCAO = "erro_de_execucao"
     """Falha de infraestrutura (timeout, 5xx). Não conta como erro do agente."""
 
+    PENDENTE_DE_JUIZ = "pendente_de_juiz"
+    """As camadas objetivas não decidiram; só anotação humana ou juiz decide.
+
+    Existe para que o pontuador **nunca precise chutar**. Contar um resíduo não
+    julgado como falha empurraria a nota para baixo; contar como acerto, para
+    cima. Reprovar por omissão é especialmente perigoso aqui, porque o resíduo
+    tende a ser maior no idioma em que o agente se expressa de forma menos
+    previsível — ou seja, viés direto no Delta.
+
+    O agregador **exclui** estas linhas do numerador e do denominador da acurácia
+    e reporta a fração separadamente. Se ela passar de ~15% numa trilha, o
+    problema é o desenho da tarefa, não o agente.
+    """
+
 
 class ClasseDeFalha(StrEnum):
     """Taxonomia de falha silenciosa. Mutuamente exclusiva e exaustiva.

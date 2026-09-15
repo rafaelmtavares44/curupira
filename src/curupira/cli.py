@@ -23,6 +23,7 @@ from curupira import __version__
 from curupira.adapters.anthropic import AdaptadorAnthropic
 from curupira.adapters.base import AdaptadorDeModelo, ParametrosDeAmostragem
 from curupira.adapters.falso import AdaptadorFalso, Politica
+from curupira.core.enums import ClasseDeFalha, Desfecho
 from curupira.core.loader import (
     ProblemaDeLint,
     Severidade,
@@ -46,12 +47,14 @@ from curupira.formatos import registrar_validadores
 from curupira.matchers import registrar_todos
 from curupira.runner.executor import (
     ARQUIVO_DA_RODADA,
+    NOME_DO_BRUTO,
     ContextoDaRodada,
     ErroDeSeguranca,
     executar_suite,
     identidade,
     ler_bruto,
 )
+from curupira.scoring.rodada import gravar_pontuado, pontuar_rodada
 from curupira.security import carregar_chave
 
 app = typer.Typer(
@@ -73,6 +76,14 @@ erro_console = Console(stderr=True, soft_wrap=True)
 
 CODIGO_DE_USO = 2
 """Saida para erro de uso: caminho inexistente, suite ja congelada."""
+
+TETO_DE_JUIZ: Final = 0.15
+"""Fracao de execucoes no juiz acima da qual a trilha esta mal desenhada.
+
+Nao e limite tecnico, e sinal de projeto: toda execucao que vai para o juiz sai
+do denominador da acuracia, e um denominador que encolhe de forma diferente entre
+os dois idiomas e viés dentro do Delta.
+"""
 
 TEMPO_LIMITE: Final = 120.0
 """Segundos por chamada. Generoso de proposito: um timeout curto transformaria
@@ -457,9 +468,54 @@ async def _rodar(
 @app.command()
 def score(
     rodada: Annotated[Path, typer.Argument(help="Diretorio da rodada a pontuar.")],
+    tarefas: Annotated[Path, typer.Option(help="Raiz do dataset.")] = Path("tasks"),
 ) -> None:
-    """Pontua as respostas cruas de uma rodada, sem chamar nenhum provedor."""
-    raise NotImplementedError
+    """Pontua as respostas cruas de uma rodada, sem chamar nenhum provedor.
+
+    Re-executavel a vontade: corrigir um matcher ou rotular um modo de falha novo
+    custa uma nova rodada deste comando, nao uma rodada paga. O `raw.jsonl` nunca
+    e reescrito.
+
+    Recusa pontuar se o hash de alguma tarefa divergir do que a rodada usou. A
+    resposta seria de uma pergunta e o gabarito de outra, e o numero sairia com
+    aparencia perfeitamente normal.
+    """
+    _preparar_registro()
+    bruto = rodada / NOME_DO_BRUTO
+    if not bruto.is_file():
+        erro_console.print(f"bruto nao encontrado: {bruto}", style="red")
+        raise typer.Exit(code=CODIGO_DE_USO)
+
+    carregadas = _dataset(tarefas)
+    try:
+        resultados = pontuar_rodada(ler_bruto(bruto), carregadas)
+        destino = gravar_pontuado(resultados, rodada)
+    except ValueError as falha:
+        erro_console.print(str(falha), style="red", markup=False)
+        raise typer.Exit(code=1) from falha
+
+    total = len(resultados)
+    passou = sum(1 for r in resultados if r.outcome is Desfecho.PASSOU)
+    juiz = sum(1 for r in resultados if r.outcome is Desfecho.PENDENTE_DE_JUIZ)
+    infra = sum(1 for r in resultados if r.outcome is Desfecho.ERRO_DE_EXECUCAO)
+    silenciosas = sum(1 for r in resultados if r.failure_class is ClasseDeFalha.FALHA_SILENCIOSA)
+    decididas = total - juiz - infra
+
+    console.print(
+        f"pontuado em {destino}\n"
+        f"  {total} execucoes · {decididas} decididas · {juiz} pendentes de juiz · "
+        f"{infra} erros de infraestrutura\n"
+        f"  {passou} passaram · {silenciosas} falhas silenciosas\n"
+        f"  proximo passo: curupira report {rodada}",
+        style="green",
+    )
+    if juiz and decididas and juiz / (juiz + decididas) > TETO_DE_JUIZ:
+        console.print(
+            f"aviso: mais de {TETO_DE_JUIZ:.0%} das execucoes cairam no juiz. "
+            "Isso e defeito de desenho de tarefa, nao do agente: declare "
+            "slot_keywords ou reescreva a tarefa como acao observavel.",
+            style="yellow",
+        )
 
 
 @app.command()

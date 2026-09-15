@@ -119,6 +119,9 @@ curupira run --suite v0.1 --agent ensaio --modelo falso-1 --provedor falso
 $env:CURUPIRA_ANTHROPIC_API_KEY = "..."
 curupira run --suite v0.1 --agent claude-baseline --modelo <modelo> `
   --provedor anthropic --repeticoes 5 --cache cache/
+
+# 5. pontuar — sem provedor, sem custo, quantas vezes quiser
+curupira score runs/v0.1__claude-baseline__<carimbo>
 ```
 
 Faça sempre o ensaio com `--provedor falso` antes da rodada paga: ele percorre o
@@ -129,7 +132,21 @@ trilha mal desenhada.
 
 `run` **não pontua**. Grava `raw.jsonl` (uma linha por repetição, com o corpo
 literal enviado ao provedor) e `rodada.json` (a tupla de reprodutibilidade).
-Pontuar é `curupira score`, que não fala com provedor nenhum.
+Pontuar é `curupira score`, que não fala com provedor nenhum: ele lê o bruto,
+grava `scored.parquet` e nunca reescreve o `raw.jsonl`. Corrigir um matcher ou
+rotular um modo de falha novo custa uma reexecução de `score` — segundos — em
+vez de uma rodada paga.
+
+`score` recusa pontuar se o hash de alguma tarefa divergir do que a rodada usou.
+Sem essa trava, o Curupira compararia a resposta de uma pergunta com o gabarito
+de outra, e o número sairia com aparência perfeitamente normal.
+
+**O pontuador nunca chuta.** Quando as camadas objetivas não decidem — o caso
+típico é o agente que pergunta em prosa sem nenhuma palavra declarada em
+`slot_keywords` — o desfecho é `pendente_de_juiz` e a linha sai do denominador da
+acurácia. Chutar seria pior do que não medir: o resíduo é maior justamente no
+idioma em que o agente se expressa de forma menos previsível, e viraria viés
+dentro do Delta. Passando de 15% numa trilha, o defeito é o desenho da tarefa.
 
 Três recusas acontecem **antes** da primeira chamada paga: hash divergente do
 congelado na suíte, tarefa da suíte ausente do dataset, e tarefa multi-turno
