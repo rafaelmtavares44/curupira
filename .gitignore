@@ -39,6 +39,13 @@ cache/
 # Lixo que o pytest deixa quando o rename do cache falha (pasta sincronizada).
 pytest-cache-files-*
 
+# Pasta que o app do Claude cria dentro da pasta conectada quando um arquivo e
+# entregue por download. Sao COPIAS de arquivos que ja estao no lugar certo da
+# arvore. Commita-las duplicaria codigo no repositorio, e a duplicata nao seria
+# vista por portao nenhum: o pytest nao a coleta, o ruff nao a checa, o mypy nao
+# a le. Duas versoes do mesmo arquivo, e uma delas sem verificacao.
+Claude outputs/
+
 # Sistema
 .DS_Store
 Thumbs.db

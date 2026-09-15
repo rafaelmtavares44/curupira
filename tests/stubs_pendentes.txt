@@ -7,15 +7,11 @@
 # REGRA: implementou uma funcao, remova a linha dela AQUI no mesmo commit.
 # Quando este arquivo ficar vazio, apague a linha "raise NotImplementedError" de
 # [tool.coverage.report].exclude_lines no pyproject.toml.
+#
+# Entrega 7: sairam os oito stubs de formatos/boleto.py e formatos/nfe.py. Com
+# isso o subpacote `formatos` esta INTEIRO, e as quatro que sobram sao todas de
+# adaptador de provedor.
 adapters/google.py::completar
 adapters/google.py::preparar
 adapters/openai.py::completar
 adapters/openai.py::preparar
-formatos/boleto.py::corromper
-formatos/boleto.py::data_para_fator
-formatos/boleto.py::fator_para_data
-formatos/boleto.py::gerar
-formatos/boleto.py::validar
-formatos/nfe.py::corromper
-formatos/nfe.py::gerar
-formatos/nfe.py::validar

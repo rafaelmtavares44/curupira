@@ -78,6 +78,7 @@ warn_no_return = true
 show_error_codes = true
 pretty = true
 files = ["src", "tests", "scripts"]
+mypy_path = "scripts"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]

@@ -28,6 +28,7 @@ repos:
         name: ferramentas na versao pinada
         entry: python scripts/checar_versoes.py
         language: system
+        stages: [pre-commit]
         pass_filenames: false
         always_run: true
 
@@ -35,6 +36,7 @@ repos:
         name: ruff (lint)
         entry: python -m ruff check --force-exclude
         language: system
+        stages: [pre-commit]
         types_or: [python, pyi]
         require_serial: true
 
@@ -42,6 +44,7 @@ repos:
         name: ruff (format)
         entry: python -m ruff format --force-exclude
         language: system
+        stages: [pre-commit]
         types_or: [python, pyi]
         require_serial: true
 
@@ -49,6 +52,7 @@ repos:
         name: mypy --strict
         entry: python -m mypy
         language: system
+        stages: [pre-commit]
         types: [python]
         pass_filenames: false
         require_serial: true
@@ -57,6 +61,7 @@ repos:
         name: bandit
         entry: python -m bandit -c pyproject.toml -q -r src
         language: system
+        stages: [pre-commit]
         types: [python]
         pass_filenames: false
         require_serial: true
@@ -65,12 +70,25 @@ repos:
         name: detect-secrets
         entry: python -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
         language: system
+        stages: [pre-commit]
         require_serial: true
 
       - id: pytest-rapido
         name: pytest (sem marcadores lentos)
         entry: python -m pytest -q -m "not lento and not integracao"
         language: system
+        stages: [pre-commit]
         types: [python]
         pass_filenames: false
         require_serial: true
+
+      # O gatilho que `default_install_hook_types` pedia desde a Fase 0 e que ate
+      # a Entrega 7 nao tinha hook nenhum. Enquanto nao tinha, o portao exigia
+      # Conventional Commits no papel e nao verificava nada; e, como nenhum hook
+      # declarava `stages`, a lista inteira era candidata aos dois gatilhos e a
+      # segunda leva saia como "Skipped (no files to check)".
+      - id: conventional-commits
+        name: mensagem de commit (Conventional Commits)
+        entry: python scripts/checar_mensagem_de_commit.py
+        language: system
+        stages: [commit-msg]
