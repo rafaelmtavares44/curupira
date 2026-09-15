@@ -122,6 +122,9 @@ curupira run --suite v0.1 --agent claude-baseline --modelo <modelo> `
 
 # 5. pontuar — sem provedor, sem custo, quantas vezes quiser
 curupira score runs/v0.1__claude-baseline__<carimbo>
+
+# 6. agregar: métricas por trilha, Delta PT-BR e linhas de base triviais
+curupira report runs/v0.1__claude-baseline__<carimbo>
 ```
 
 Faça sempre o ensaio com `--provedor falso` antes da rodada paga: ele percorre o
@@ -147,6 +150,39 @@ típico é o agente que pergunta em prosa sem nenhuma palavra declarada em
 acurácia. Chutar seria pior do que não medir: o resíduo é maior justamente no
 idioma em que o agente se expressa de forma menos previsível, e viraria viés
 dentro do Delta. Passando de 15% numa trilha, o defeito é o desenho da tarefa.
+
+### O que o `report` recusa fazer
+
+Quatro escolhas de denominador, cada uma fechando uma forma de o número mentir:
+
+- **Erro de infraestrutura sai de tudo.** Um 529 do provedor favoreceria quem
+  rodou num dia tranquilo.
+- **`pendente_de_juiz` sai do numerador e do denominador**, e a fração aparece em
+  coluna própria.
+- **A latência ignora acerto de cache.** Entrada de cache tem `latency_ms = 0`, e
+  deixá-la no p50 daria a impressão de um agente mais rápido a cada reexecução.
+- **O Delta recusa o par cuja contraparte não foi decidida.** Comparar EN e PT
+  com denominadores diferentes é viés disfarçado de número.
+
+As **linhas de base triviais** saem sempre, comparadas **por trilha**. Uma
+política degenerada gabarita uma trilha e zera as outras — é essa a definição
+dela —, então uma média global esconderia exatamente o que elas existem para
+expor. Empatar com o trivial não é bater o trivial.
+
+### A estatística, e por que não há scipy aqui
+
+`mcnemar_exato` usa a binomial, não a aproximação qui-quadrado: o número de
+discordantes vai ser pequeno num piloto, e a aproximação mente justamente aí. O
+IC sai de um bootstrap BCa que reamostra **pares**, com seed fixa — reamostrar
+repetições trataria as k repetições de uma tarefa como independentes, e o
+intervalo sairia estreito demais. O método **degrada e declara**: com menos de 10
+pares o campo `metodo_ic` diz `amostra_insuficiente`, e o comando avisa.
+
+Tudo isso cabe em `math` e `statistics.NormalDist`. Somar ~30 MB de supply chain
+— com janela de carência, lockfile com hash e pip-audit, como manda o projeto —
+por três funções seria mau negócio. Os valores de referência em
+`tests/test_delta.py` foram conferidos contra `scipy 1.17.1` e congelados como
+constantes: o CI não ganha dependência, o número ganha testemunha.
 
 Três recusas acontecem **antes** da primeira chamada paga: hash divergente do
 congelado na suíte, tarefa da suíte ausente do dataset, e tarefa multi-turno

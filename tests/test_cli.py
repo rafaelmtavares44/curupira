@@ -176,11 +176,11 @@ def test_verify_declara_suite_morta_por_errata(dataset: Path, tmp_path: Path) ->
     assert resultado.exit_code == 1
 
 
-def test_comandos_ainda_nao_implementados_estouram_alto(tmp_path: Path) -> None:
-    """Um stub tem que estourar, não devolver zero e mentir que rodou."""
-    resultado = runner.invoke(app, ["report", str(tmp_path)])
-    assert resultado.exit_code != 0
-    assert isinstance(resultado.exception, NotImplementedError)
+def test_o_pipeline_inteiro_esta_na_ajuda() -> None:
+    """Nenhum comando da v0.1 e mais um stub: as tres etapas existem."""
+    saida = _saida(runner.invoke(app, ["--help"]))
+    for comando in ("validate", "suite", "run", "score", "report"):
+        assert comando in saida
 
 
 # --------------------------------------------------------------------------
@@ -552,3 +552,80 @@ def test_score_recusa_dataset_inexistente(dataset: Path, tmp_path: Path) -> None
         app, ["score", str(rodada), "--tarefas", str(tmp_path / "nao-existe")]
     )
     assert resultado.exit_code == 2
+
+
+# --------------------------------------------------------------------------
+# report
+# --------------------------------------------------------------------------
+
+
+def test_report_de_ponta_a_ponta(dataset: Path, tmp_path: Path) -> None:
+    """As tres etapas encadeadas: run -> score -> report."""
+    rodada = _rodar(dataset, tmp_path)
+    assert runner.invoke(app, ["score", str(rodada), "--tarefas", str(dataset)]).exit_code == 0
+
+    resultado = runner.invoke(app, ["report", str(rodada), "--tarefas", str(dataset)])
+    assert resultado.exit_code == 0, resultado.output
+
+    relatorio = json.loads((rodada / "report.json").read_text(encoding="utf-8"))
+    assert relatorio["agent_id"] == "ensaio"
+    assert relatorio["suite_id"] == "v0.1"
+    assert set(relatorio["linhas_de_base"])
+
+
+def test_report_sempre_imprime_as_linhas_de_base(dataset: Path, tmp_path: Path) -> None:
+    """Obrigatorio: publicar a nota sem o trivial ao lado e enganoso."""
+    rodada = _rodar(dataset, tmp_path)
+    runner.invoke(app, ["score", str(rodada), "--tarefas", str(dataset)])
+    saida = _saida(runner.invoke(app, ["report", str(rodada), "--tarefas", str(dataset)]))
+    assert "Linhas de base triviais" in saida
+    assert "nunca_chama" in saida
+
+
+def test_report_recusa_rodada_nao_pontuada(dataset: Path, tmp_path: Path) -> None:
+    rodada = _rodar(dataset, tmp_path)
+    resultado = runner.invoke(app, ["report", str(rodada), "--tarefas", str(dataset)])
+    assert resultado.exit_code == 2
+    assert "nao pontuada" in _saida(resultado)
+
+
+def test_report_declara_quando_nao_ha_delta(dataset: Path, tmp_path: Path) -> None:
+    """O adaptador falso erra tudo, entao ha Delta; o que falta e par decidido."""
+    rodada = _rodar(dataset, tmp_path)
+    runner.invoke(app, ["score", str(rodada), "--tarefas", str(dataset)])
+    saida = _saida(runner.invoke(app, ["report", str(rodada), "--tarefas", str(dataset)]))
+    assert "Delta PT-BR" in saida
+
+
+def test_report_com_errata_conta_a_exclusao(dataset: Path, tmp_path: Path) -> None:
+    """A suite nao muda um byte; quem exclui e o agregador."""
+    rodada = _rodar(dataset, tmp_path)
+    runner.invoke(app, ["score", str(rodada), "--tarefas", str(dataset)])
+
+    alvo = next(dataset.glob("*-pt.yaml")).stem
+    errata = tmp_path / "errata.yaml"
+    errata.write_text(
+        yaml.safe_dump(
+            {
+                "suite_id": "v0.1",
+                "revision": 1,
+                "entries": [
+                    {
+                        "task_id": alvo,
+                        "task_version": 1,
+                        "date": "2026-09-15",
+                        "defect": "gabarito ambiguo",
+                        "test_ref": "tests/test_errata.py::test_repro",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    resultado = runner.invoke(
+        app, ["report", str(rodada), "--tarefas", str(dataset), "--errata", str(errata)]
+    )
+    assert resultado.exit_code == 0, resultado.output
+    saida = _saida(resultado)
+    assert "excluida(s) pela errata" in saida
+    assert "Delta PT-BR nao calculado" in saida

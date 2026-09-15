@@ -17,7 +17,9 @@ from typing import Annotated, Final
 import httpx
 import typer
 from pydantic import SecretStr
+from rich import box
 from rich.console import Console
+from rich.table import Table
 
 from curupira import __version__
 from curupira.adapters.anthropic import AdaptadorAnthropic
@@ -45,6 +47,8 @@ from curupira.core.suite import (
 from curupira.core.task import Tarefa
 from curupira.formatos import registrar_validadores
 from curupira.matchers import registrar_todos
+from curupira.report.aggregate import RelatorioDaRodada, agregar
+from curupira.report.delta import METODO_BCA
 from curupira.runner.executor import (
     ARQUIVO_DA_RODADA,
     NOME_DO_BRUTO,
@@ -54,8 +58,10 @@ from curupira.runner.executor import (
     identidade,
     ler_bruto,
 )
-from curupira.scoring.rodada import gravar_pontuado, pontuar_rodada
+from curupira.scoring.rodada import NOME_DO_PONTUADO, gravar_pontuado, pontuar_rodada
 from curupira.security import carregar_chave
+
+ARQUIVO_DE_RELATORIO: Final = "report.json"
 
 app = typer.Typer(
     name="curupira",
@@ -518,13 +524,116 @@ def score(
         )
 
 
+def _tabela_das_trilhas(relatorio: RelatorioDaRodada) -> Table:
+    """Monta a tabela de metricas por trilha."""
+    tabela = Table(title=f"{relatorio.agent_id} · suite {relatorio.suite_id}", box=box.SIMPLE)
+    colunas = (
+        "trilha",
+        "n",
+        "acuracia",
+        "trivial",
+        "falha silenc.",
+        "abst. indev.",
+        "instab.",
+        "juiz",
+    )
+    for coluna in colunas:
+        tabela.add_column(coluna, justify="right" if coluna != "trilha" else "left")
+    for nome, m in sorted(relatorio.por_trilha.items()):
+        tabela.add_row(
+            nome,
+            str(m.n_decididas),
+            f"{m.acuracia:.1%}",
+            "—" if m.linha_de_base is None else f"{m.linha_de_base:.1%}",
+            f"{m.taxa_de_falha_silenciosa:.1%}",
+            f"{m.taxa_de_abstencao_indevida:.1%}",
+            f"{m.taxa_de_instabilidade:.1%}",
+            f"{m.fracao_pontuada_por_juiz:.1%}",
+        )
+    return tabela
+
+
+def _imprimir_delta(relatorio: RelatorioDaRodada) -> None:
+    """Imprime o Delta PT-BR, ou por que ele nao existe."""
+    delta = relatorio.delta
+    if delta is None:
+        erro_console.print(
+            f"Delta PT-BR nao calculado: {relatorio.motivo_sem_delta}", style="yellow"
+        )
+        return
+    console.print(
+        f"\n[bold]Delta PT-BR[/bold] = {delta.delta:+.1%}  "
+        f"IC 95% [{delta.ic_inferior:+.1%}, {delta.ic_superior:+.1%}] ({delta.metodo_ic})\n"
+        f"  EN {delta.acuracia_en:.1%} · PT-BR {delta.acuracia_pt:.1%} · "
+        f"{delta.n_pares} pares strict · {delta.teste} p={delta.p_valor:.4f}",
+    )
+    if delta.metodo_ic != METODO_BCA:
+        console.print(
+            f"  aviso: o intervalo saiu por '{delta.metodo_ic}', nao por BCa. "
+            "Leia como numero de piloto, nao como resultado.",
+            style="yellow",
+        )
+
+
+def _imprimir_linhas_de_base(relatorio: RelatorioDaRodada) -> None:
+    """Imprime as politicas triviais ao lado da nota. Obrigatorio."""
+    if not relatorio.linhas_de_base:
+        return
+    linhas = " · ".join(f"{p} {n:.1%}" for p, n in sorted(relatorio.linhas_de_base.items()))
+    console.print(f"\n[bold]Linhas de base triviais[/bold]\n  {linhas}")
+    perdeu = [
+        f"{nome} (trivial '{m.melhor_linha_de_base}' {m.linha_de_base:.1%})"
+        for nome, m in sorted(relatorio.por_trilha.items())
+        if m.bate_a_linha_de_base is False and m.linha_de_base is not None
+    ]
+    if perdeu:
+        erro_console.print(
+            "  ATENCAO: o agente NAO bate a politica trivial em: " + " · ".join(perdeu) + ". "
+            "Sem bater o trivial, nao ha competencia demonstrada naquela trilha.",
+            style="red",
+        )
+
+
 @app.command()
 def report(
     rodada: Annotated[Path, typer.Argument(help="Diretorio da rodada.")],
+    tarefas: Annotated[Path, typer.Option(help="Raiz do dataset.")] = Path("tasks"),
     errata: Annotated[Path | None, typer.Option(help="Errata a aplicar.")] = None,
 ) -> None:
-    """Agrega uma rodada pontuada em metricas, Delta PT-BR e linhas de base."""
-    raise NotImplementedError
+    """Agrega uma rodada pontuada em metricas, Delta PT-BR e linhas de base.
+
+    As linhas de base triviais saem SEMPRE, ao lado da nota. Publicar a acuracia
+    de uma trilha sem a politica degenerada ao lado e enganoso por construcao.
+    """
+    _preparar_registro()
+    caminho = rodada / NOME_DO_PONTUADO
+    if not caminho.is_file():
+        erro_console.print(
+            f"rodada nao pontuada: {caminho} nao existe. Rode `curupira score {rodada}` antes.",
+            style="red",
+        )
+        raise typer.Exit(code=CODIGO_DE_USO)
+
+    carregadas = list(_dataset(tarefas).values())
+    aplicada = carregar_errata(errata) if errata is not None else None
+    try:
+        relatorio = agregar(
+            caminho, carregadas, errata=aplicada, saida=rodada / ARQUIVO_DE_RELATORIO
+        )
+    except ValueError as falha:
+        erro_console.print(str(falha), style="red", markup=False)
+        raise typer.Exit(code=1) from falha
+
+    console.print(_tabela_das_trilhas(relatorio))
+    _imprimir_delta(relatorio)
+    _imprimir_linhas_de_base(relatorio)
+    if relatorio.n_tarefas_com_errata:
+        console.print(
+            f"\n{relatorio.n_tarefas_com_errata} tarefa(s) excluida(s) pela errata "
+            f"revisao {relatorio.errata_revision}",
+            style="yellow",
+        )
+    console.print(f"\nrelatorio em {rodada / ARQUIVO_DE_RELATORIO}", style="green")
 
 
 if __name__ == "__main__":  # pragma: no cover

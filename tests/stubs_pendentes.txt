@@ -11,7 +11,6 @@ adapters/google.py::completar
 adapters/google.py::preparar
 adapters/openai.py::completar
 adapters/openai.py::preparar
-cli.py::report
 formatos/boleto.py::corromper
 formatos/boleto.py::data_para_fator
 formatos/boleto.py::fator_para_data
@@ -34,11 +33,3 @@ formatos/placa.py::validar
 formatos/telefone.py::corromper
 formatos/telefone.py::gerar
 formatos/telefone.py::validar
-report/aggregate.py::agregar
-report/baselines.py::nota_da_politica
-report/baselines.py::todas_as_notas
-report/delta.py::bootstrap_bca
-report/delta.py::calcular
-report/delta.py::diferencas_pareadas
-report/delta.py::mcnemar_exato
-report/delta.py::wilcoxon_pareado
