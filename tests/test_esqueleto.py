@@ -9,7 +9,7 @@ from importlib.metadata import distribution
 import pytest
 
 import curupira
-from curupira.formatos.cpf import validar as validar_cpf
+from curupira.formatos.cep import validar as validar_cep
 
 
 def _todos_os_modulos() -> list[str]:
@@ -34,9 +34,9 @@ def test_nao_ha_litellm_entre_as_dependencias() -> None:
 def test_stub_falha_alto_e_nao_devolve_valor_errado() -> None:
     """Um stub tem que estourar, não devolver `None` e contaminar um relatório.
 
-    Aponta de propósito para uma ponta solta ainda aberta. Quando `validar` for
-    implementado na Entrega 2, este teste falha e obriga a escolher outro alvo —
+    Aponta de propósito para uma ponta solta ainda aberta. Quando `validar` do CEP for
+    implementado, este teste falha e obriga a escolher outro alvo —
     ou a apagar o teste, se não sobrar stub nenhum.
     """
     with pytest.raises(NotImplementedError):
-        validar_cpf("529.982.247-25")
+        validar_cep("74000-000")

@@ -6,8 +6,20 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from hypothesis import HealthCheck, settings
 
 from curupira.security import esquecer_segredos
+
+# deadline=None de proposito: o deadline do Hypothesis mede TEMPO, e tempo varia
+# com a maquina. Um teste de propriedade que falha porque o runner do CI estava
+# ocupado nao esta reportando bug — esta gastando a confianca no portao.
+settings.register_profile(
+    "curupira",
+    deadline=None,
+    max_examples=200,
+    suppress_health_check=[HealthCheck.too_slow],
+)
+settings.load_profile("curupira")
 
 RAIZ = Path(__file__).resolve().parent.parent
 

@@ -14,8 +14,6 @@ adapters/openai.py::completar
 cli.py::report
 cli.py::run
 cli.py::score
-formatos/base.py::modulo10
-formatos/base.py::modulo11
 formatos/boleto.py::corromper
 formatos/boleto.py::data_para_fator
 formatos/boleto.py::fator_para_data
@@ -24,12 +22,6 @@ formatos/boleto.py::validar
 formatos/cep.py::corromper
 formatos/cep.py::gerar
 formatos/cep.py::validar
-formatos/cnpj.py::corromper
-formatos/cnpj.py::gerar
-formatos/cnpj.py::validar
-formatos/cpf.py::corromper
-formatos/cpf.py::gerar
-formatos/cpf.py::validar
 formatos/nfe.py::corromper
 formatos/nfe.py::gerar
 formatos/nfe.py::validar
@@ -44,14 +36,6 @@ formatos/placa.py::validar
 formatos/telefone.py::corromper
 formatos/telefone.py::gerar
 formatos/telefone.py::validar
-matchers/numerico.py::data_iso
-matchers/numerico.py::exact_int
-matchers/numerico.py::moeda_normalizada
-matchers/numerico.py::tolerancia_numerica
-matchers/texto.py::exact_str
-matchers/texto.py::fuzzy_name
-matchers/texto.py::one_of
-matchers/texto.py::por_validador
 report/aggregate.py::agregar
 report/baselines.py::nota_da_politica
 report/baselines.py::todas_as_notas
@@ -65,9 +49,6 @@ runner/cache.py::gravar
 runner/cache.py::ler
 runner/executor.py::executar_suite
 runner/executor.py::executar_tarefa
-scoring/ast_checker.py::casar_alternativa
-scoring/ast_checker.py::checar
-scoring/ast_checker.py::normalizar_chamadas
 scoring/silent_failure.py::classificar
 scoring/silent_failure.py::houve_abstencao
 scoring/silent_failure.py::houve_hedge
