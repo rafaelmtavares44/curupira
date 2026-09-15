@@ -103,6 +103,48 @@ pip-audit
 pytest
 ```
 
+## Uso
+
+```bash
+# 1. lint do dataset
+curupira validate --strict
+
+# 2. congelar uma suíte (id + task_version + sha256 de cada tarefa)
+curupira suite freeze v0.1
+
+# 3. ensaio: sem chave, sem rede, sem custo
+curupira run --suite v0.1 --agent ensaio --modelo falso-1 --provedor falso
+
+# 4. rodada de verdade (PowerShell)
+$env:CURUPIRA_ANTHROPIC_API_KEY = "..."
+curupira run --suite v0.1 --agent claude-baseline --modelo <modelo> `
+  --provedor anthropic --repeticoes 5 --cache cache/
+```
+
+Faça sempre o ensaio com `--provedor falso` antes da rodada paga: ele percorre o
+mesmo caminho de arquivo, concorrência, cache e formato do bruto. O adaptador
+falso não é andaime — é também a linha de base trivial do leaderboard, e uma
+trilha em que o agente que sempre chama a primeira ferramenta vai bem é uma
+trilha mal desenhada.
+
+`run` **não pontua**. Grava `raw.jsonl` (uma linha por repetição, com o corpo
+literal enviado ao provedor) e `rodada.json` (a tupla de reprodutibilidade).
+Pontuar é `curupira score`, que não fala com provedor nenhum.
+
+Três recusas acontecem **antes** da primeira chamada paga: hash divergente do
+congelado na suíte, tarefa da suíte ausente do dataset, e tarefa multi-turno
+(T6, que só chega na v0.3). Descobrir qualquer uma delas na tarefa 200 custaria
+as outras 199.
+
+Sobre reprodutibilidade: a Messages API da Anthropic **não tem parâmetro de
+seed**. Cada linha grava `seed_aplicada`, e nesse provedor ela é `false` — a
+repetição mede não-determinismo, não reprodutibilidade bit a bit. Uma tupla que
+listasse uma seed jamais honrada seria uma tupla que mente.
+
+`cost_brl` é sempre `0.0` no bruto, de propósito: converter token em real exige
+tabela de preços e cotação com data. Os tokens ficam gravados na resposta; o
+custo entra no relatório, a partir de uma tabela declarada e datada.
+
 ## Estrutura
 
 ```

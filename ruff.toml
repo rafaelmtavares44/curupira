@@ -34,11 +34,21 @@ ignore = [
   "D401",   # "imperative mood" nao se aplica bem a docstring em portugues
   "PLR0913", # numero de argumentos: os modelos de dominio tem muitos campos
   "TRY003", # mensagens de excecao longas sao legiveis
+  # N818 exige sufixo "Error" no nome da excecao. O codigo deste projeto e
+  # escrito em portugues por decisao explicita, e ali o prefixo "Erro" cumpre
+  # exatamente a funcao que a regra quer: `ErroDoProvedor` se le como excecao a
+  # primeira vista. `ErroDoProvedorError` seria portunhol, nao clareza.
+  "N818",
 ]
 
 [lint.per-file-ignores]
 "tests/**" = ["S101", "D100", "D103", "PLR2004", "ANN401", "TRY301"]
-"src/curupira/cli.py" = ["A002"]  # `help` como nome de parametro do Typer
+# A002: `help` como nome de parametro do Typer.
+# PLR0917: `curupira run` tem uma opcao por parametro de reprodutibilidade, e
+# cada uma existe porque entra na tupla que torna a rodada refazivel. Agrupar em
+# um objeto de configuracao esconderia as opcoes do `--help`, que e onde quem
+# roda o benchmark descobre o que pode fixar.
+"src/curupira/cli.py" = ["A002", "PLR0917"]
 
 [lint.pydocstyle]
 convention = "google"

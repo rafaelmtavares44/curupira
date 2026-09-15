@@ -145,6 +145,25 @@ def redigir(texto: str) -> str:
     return resultado
 
 
+def contem_segredo(texto: str) -> bool:
+    """Diz se algum segredo registrado aparece no texto.
+
+    Serve para o caso em que redigir seria a decisão **errada**. O corpo da
+    requisição gravado numa rodada nunca deveria conter a chave; se contiver, há
+    um defeito no adaptador, e substituir por `[REDIGIDO]` esconderia o defeito
+    atrás de um artefato aparentemente limpo. O runner usa esta função para
+    **recusar** gravar, em vez de limpar.
+
+    Args:
+        texto: o texto a inspecionar.
+
+    Returns:
+        `True` se algum segredo registrado estiver presente.
+    """
+    segredos = _REGISTRO.segredos
+    return any(segredo in texto for segredo in segredos)
+
+
 class FormatadorDeRedacao(logging.Formatter):
     """Formatador que redige a saída final já montada.
 

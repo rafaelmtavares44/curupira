@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -176,14 +177,280 @@ def test_verify_declara_suite_morta_por_errata(dataset: Path, tmp_path: Path) ->
 
 def test_comandos_ainda_nao_implementados_estouram_alto(tmp_path: Path) -> None:
     """Um stub tem que estourar, não devolver zero e mentir que rodou."""
-    for args in (
-        ["run", "--suite", "v0.1", "--agent", "x"],
-        ["score", str(tmp_path)],
-        ["report", str(tmp_path)],
-    ):
+    for args in (["score", str(tmp_path)], ["report", str(tmp_path)]):
         resultado = runner.invoke(app, args)
         assert resultado.exit_code != 0
         assert isinstance(resultado.exception, NotImplementedError)
+
+
+# --------------------------------------------------------------------------
+# run
+# --------------------------------------------------------------------------
+
+
+def _congelar(dataset: Path, suites: Path) -> list[str]:
+    """Congela a suíte de teste e devolve as opções comuns de `run`."""
+    congelar = runner.invoke(
+        app, ["suite", "freeze", "v0.1", "--tarefas", str(dataset), "--destino", str(suites)]
+    )
+    assert congelar.exit_code == 0, congelar.output
+    return ["--tarefas", str(dataset), "--destino", str(suites)]
+
+
+def test_run_com_o_adaptador_falso(dataset: Path, tmp_path: Path) -> None:
+    """Ensaio de ponta a ponta sem chave, sem rede e sem custo.
+
+    É este caminho que o CI roda: um runner só exercitado contra a API de verdade
+    é um runner testado em lugar nenhum.
+    """
+    suites = tmp_path / "suites"
+    saida = tmp_path / "runs"
+    comum = _congelar(dataset, suites)
+    resultado = runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v0.1",
+            "--agent",
+            "ensaio",
+            "--modelo",
+            "falso-1",
+            "--provedor",
+            "falso",
+            "--repeticoes",
+            "2",
+            "--saida",
+            str(saida),
+            *comum,
+        ],
+    )
+    assert resultado.exit_code == 0, resultado.output
+
+    (rodada,) = list(saida.iterdir())
+    linhas = (rodada / "raw.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(linhas) == 4
+    assert all(json.loads(linha)["suite_id"] == "v0.1" for linha in linhas)
+
+    registro = json.loads((rodada / "rodada.json").read_text(encoding="utf-8"))
+    assert registro["execucoes"] == 4
+    assert registro["erros"] == 0
+    assert len(registro["suite_sha256"]) == 64
+
+
+def test_run_com_cache_reaproveita(dataset: Path, tmp_path: Path) -> None:
+    suites = tmp_path / "suites"
+    comum = _congelar(dataset, suites)
+    args = [
+        "run",
+        "--suite",
+        "v0.1",
+        "--agent",
+        "ensaio",
+        "--modelo",
+        "falso-1",
+        "--repeticoes",
+        "1",
+        "--cache",
+        str(tmp_path / "cache"),
+        "--saida",
+        str(tmp_path / "runs"),
+        *comum,
+    ]
+    assert runner.invoke(app, args).exit_code == 0
+    segunda = runner.invoke(app, args)
+    assert segunda.exit_code == 0, segunda.output
+    assert "2 do cache" in _saida(segunda)
+
+
+def test_run_avisa_quando_a_seed_nao_sera_aplicada(dataset: Path, tmp_path: Path) -> None:
+    """Quem pede seed pede reprodutibilidade; se não vai ter, precisa saber."""
+    comum = _congelar(dataset, tmp_path / "suites")
+    resultado = runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v0.1",
+            "--agent",
+            "x",
+            "--modelo",
+            "falso-1",
+            "--seed",
+            "7",
+            "--repeticoes",
+            "1",
+            "--saida",
+            str(tmp_path / "runs"),
+            *comum,
+        ],
+    )
+    assert resultado.exit_code == 0, resultado.output
+    assert "nao aceita seed" not in _saida(resultado)
+
+
+def test_run_com_provedor_que_ignora_seed_avisa(
+    dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", "chave-falsa-so-para-o-aviso")
+    comum = _congelar(dataset, tmp_path / "suites")
+    resultado = runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v0.1",
+            "--agent",
+            "x",
+            "--modelo",
+            "m",
+            "--provedor",
+            "anthropic",
+            "--seed",
+            "7",
+            "--repeticoes",
+            "1",
+            "--saida",
+            str(tmp_path / "runs"),
+            *comum,
+        ],
+    )
+    # A rodada segue e falha nas chamadas (sem rede), mas o aviso tem que sair
+    # ANTES — e sair junto com o resultado, nao no lugar dele.
+    assert "nao aceita seed" in _saida(resultado)
+
+
+def test_run_termina_em_1_quando_ha_erro_de_infraestrutura(
+    dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rodada com erro de provedor não pode sair 0 e parecer completa."""
+    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", "chave-falsa-sem-rede-nenhuma")
+    comum = _congelar(dataset, tmp_path / "suites")
+    saida = tmp_path / "runs"
+    resultado = runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v0.1",
+            "--agent",
+            "x",
+            "--modelo",
+            "m",
+            "--provedor",
+            "anthropic",
+            "--repeticoes",
+            "1",
+            "--saida",
+            str(saida),
+            *comum,
+        ],
+    )
+    assert resultado.exit_code == 1
+    (rodada,) = list(saida.iterdir())
+    registro = json.loads((rodada / "rodada.json").read_text(encoding="utf-8"))
+    assert registro["erros"] == 2
+    assert registro["execucoes"] == 2
+
+
+def test_run_recusa_suite_inexistente(dataset: Path, tmp_path: Path) -> None:
+    resultado = runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v9.9",
+            "--agent",
+            "x",
+            "--modelo",
+            "m",
+            "--tarefas",
+            str(dataset),
+            "--destino",
+            str(tmp_path),
+        ],
+    )
+    assert resultado.exit_code == 2
+
+
+def test_run_recusa_dataset_editado_em_silencio(dataset: Path, tmp_path: Path) -> None:
+    """A rodada falha antes de gastar, em vez de produzir número errado."""
+    suites = tmp_path / "suites"
+    comum = _congelar(dataset, suites)
+
+    alvo = next(dataset.glob("*-pt.yaml"))
+    bruto = yaml.safe_load(alvo.read_text(encoding="utf-8"))
+    bruto["difficulty"] = 5
+    alvo.write_text(yaml.safe_dump(bruto, allow_unicode=True), encoding="utf-8")
+
+    resultado = runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v0.1",
+            "--agent",
+            "x",
+            "--modelo",
+            "m",
+            "--saida",
+            str(tmp_path / "runs"),
+            *comum,
+        ],
+    )
+    assert resultado.exit_code == 1
+    assert "edicao silenciosa" in _saida(resultado)
+    assert not (tmp_path / "runs").exists()
+
+
+def test_run_sem_chave_para_antes_de_rodar(
+    dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sem chave o comando para em 2, e nenhum diretório de rodada é criado."""
+    monkeypatch.delenv("CURUPIRA_ANTHROPIC_API_KEY", raising=False)
+    comum = _congelar(dataset, tmp_path / "suites")
+    resultado = runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v0.1",
+            "--agent",
+            "x",
+            "--modelo",
+            "m",
+            "--provedor",
+            "anthropic",
+            "--saida",
+            str(tmp_path / "runs"),
+            *comum,
+        ],
+    )
+    assert resultado.exit_code == 2
+    assert "chave indisponivel" in _saida(resultado)
+    assert not (tmp_path / "runs").exists()
+
+
+def test_run_recusa_diretorio_de_tarefas_inexistente(tmp_path: Path, dataset: Path) -> None:
+    comum = _congelar(dataset, tmp_path / "suites")
+    del comum
+    resultado = runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v0.1",
+            "--agent",
+            "x",
+            "--modelo",
+            "m",
+            "--tarefas",
+            str(tmp_path / "nao-existe"),
+            "--destino",
+            str(tmp_path / "suites"),
+        ],
+    )
+    assert resultado.exit_code == 2
 
 
 def test_dataset_real_congela(raiz_do_repo: Path, tmp_path: Path) -> None:

@@ -288,6 +288,17 @@ def _lint_um_par(pair_id: str, membros: Sequence[Tarefa]) -> list[ProblemaDeLint
                 f"o par '{pair_id}' espera comportamentos de tipos diferentes",
             )
         )
+    if len({t.input.user_message for t in membros}) == 1:
+        problemas.append(
+            _erro(
+                "par-idiomas-diferentes",
+                strict[0].id,
+                f"as duas versoes do par '{pair_id}' tem a MESMA mensagem de usuario. "
+                "Ou a traducao ficou pendente, ou o par nao deveria ser strict. Par "
+                "identico contribui com zero para o Delta por construcao — e zero e "
+                "exatamente a direcao que favorece quem publica o numero",
+            )
+        )
     return problemas
 
 

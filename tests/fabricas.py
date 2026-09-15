@@ -8,6 +8,18 @@ from __future__ import annotations
 
 from typing import Any
 
+MENSAGEM_PT = "faz uma transferencia de 1.234,56 pro Silva"
+MENSAGEM_EN = "make a transfer of 1,234.56 to Silva"
+
+MENSAGEM_POR_IDIOMA: dict[str, str] = {"pt-BR": MENSAGEM_PT, "en-US": MENSAGEM_EN}
+"""As duas versoes de um par strict tem que diferir de fato.
+
+O lint `par-idiomas-diferentes` recusa um par com a mesma mensagem nos dois
+idiomas, e com razao: par identico contribui com zero para o Delta por
+construcao. A fabrica tem que produzir dado que passa nas proprias regras do
+projeto, senao ela ensina o defeito.
+"""
+
 FERRAMENTA_TRANSFERENCIA: dict[str, Any] = {
     "name": "criar_transferencia",
     "description": "Cria uma transferencia bancaria.",
@@ -52,6 +64,7 @@ def tarefa_bruta(
     pair_id: str | None = None,
     valor: int = 123456,
     forma_curta: bool = False,
+    mensagem: str | None = None,
     **extras: Any,
 ) -> dict[str, Any]:
     """Monta o mapeamento bruto de uma tarefa de tool calling.
@@ -64,6 +77,7 @@ def tarefa_bruta(
         pair_id: id do par, quando houver.
         valor: o `valor_centavos` esperado — muda o gabarito.
         forma_curta: usa `calls:` em vez de `accept:`.
+        mensagem: a mensagem do usuário. Sem argumento, usa a do idioma.
         **extras: campos adicionais mesclados no topo.
 
     Returns:
@@ -106,7 +120,7 @@ def tarefa_bruta(
         "context": {
             "tools": [FERRAMENTA_TRANSFERENCIA, *FERRAMENTAS_DE_ABSTENCAO],
         },
-        "input": {"user_message": "faz uma transferencia de 1.234,56 pro Silva"},
+        "input": {"user_message": mensagem or MENSAGEM_POR_IDIOMA.get(locale, MENSAGEM_PT)},
         "expect": expect,
     }
     if pair_id is not None:

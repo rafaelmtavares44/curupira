@@ -166,6 +166,23 @@ def test_par_com_tipos_de_espera_diferentes() -> None:
     assert "par-mesmo-tipo-de-espera" in _regras(lint_do_dataset(_tarefas(pt, en)))
 
 
+def test_par_com_a_mesma_mensagem_nos_dois_idiomas() -> None:
+    """Tradução esquecida contribui com zero para o Delta, por construção.
+
+    E zero é a direção que favorece quem publica o número, o que faz deste um
+    defeito que ninguém tem incentivo para procurar — logo, tem que ser o lint a
+    procurar.
+    """
+    pt, en = par_strict()
+    en["input"]["user_message"] = pt["input"]["user_message"]
+    assert "par-idiomas-diferentes" in _regras(lint_do_dataset(_tarefas(pt, en)))
+
+
+def test_par_bem_traduzido_passa() -> None:
+    pt, en = par_strict()
+    assert "par-idiomas-diferentes" not in _regras(lint_do_dataset(_tarefas(pt, en)))
+
+
 def test_matcher_inexistente() -> None:
     bruto = tarefa_bruta()
     bruto["expect"]["accept"][0]["calls"][0]["arg_specs"]["favorecido"]["matcher"] = "inventado"

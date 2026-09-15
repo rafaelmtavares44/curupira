@@ -7,12 +7,11 @@
 # REGRA: implementou uma funcao, remova a linha dela AQUI no mesmo commit.
 # Quando este arquivo ficar vazio, apague a linha "raise NotImplementedError" de
 # [tool.coverage.report].exclude_lines no pyproject.toml.
-adapters/anthropic.py::completar
-adapters/base.py::corpo_literal_enviado
 adapters/google.py::completar
+adapters/google.py::preparar
 adapters/openai.py::completar
+adapters/openai.py::preparar
 cli.py::report
-cli.py::run
 cli.py::score
 formatos/boleto.py::corromper
 formatos/boleto.py::data_para_fator
@@ -44,11 +43,6 @@ report/delta.py::calcular
 report/delta.py::diferencas_pareadas
 report/delta.py::mcnemar_exato
 report/delta.py::wilcoxon_pareado
-runner/cache.py::chave_de_cache
-runner/cache.py::gravar
-runner/cache.py::ler
-runner/executor.py::executar_suite
-runner/executor.py::executar_tarefa
 scoring/silent_failure.py::classificar
 scoring/silent_failure.py::houve_abstencao
 scoring/silent_failure.py::houve_hedge
