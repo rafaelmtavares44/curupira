@@ -9,7 +9,7 @@ from importlib.metadata import distribution
 import pytest
 
 import curupira
-from curupira.formatos.cep import validar as validar_cep
+from curupira.formatos.boleto import validar as validar_linha_digitavel
 
 
 def _todos_os_modulos() -> list[str]:
@@ -34,9 +34,13 @@ def test_nao_ha_litellm_entre_as_dependencias() -> None:
 def test_stub_falha_alto_e_nao_devolve_valor_errado() -> None:
     """Um stub tem que estourar, não devolver `None` e contaminar um relatório.
 
-    Aponta de propósito para uma ponta solta ainda aberta. Quando `validar` do CEP for
-    implementado, este teste falha e obriga a escolher outro alvo —
-    ou a apagar o teste, se não sobrar stub nenhum.
+    Aponta de propósito para uma ponta solta ainda aberta. Quando `validar` do
+    boleto for implementado, este teste falha e obriga a escolher outro alvo — ou
+    a apagar o teste, se não sobrar stub nenhum.
+
+    A auto-destruição é o recurso, não o defeito: o teste vira um lembrete que
+    não dá para ignorar. Alvos já aposentados por terem sido implementados:
+    `cep.validar` (Entrega 6).
     """
     with pytest.raises(NotImplementedError):
-        validar_cep("74000-000")
+        validar_linha_digitavel("0" * 47)
