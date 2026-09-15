@@ -9,9 +9,11 @@
 # [tool.coverage.report].exclude_lines no pyproject.toml.
 #
 # Entrega 7: sairam os oito stubs de formatos/boleto.py e formatos/nfe.py. Com
-# isso o subpacote `formatos` esta INTEIRO, e as quatro que sobram sao todas de
-# adaptador de provedor.
+# isso o subpacote `formatos` esta INTEIRO.
+#
+# Entrega 8: saiu o adaptador da OpenAI. As duas que sobram sao do Google, e
+# estao paradas por um motivo declarado: o Gemini tem DUAS APIs vigentes
+# (generateContent, suportada, e Interactions, recomendada desde jun/2026) e a
+# escolha entre elas ainda nao foi feita. Ver ADR 0004.
 adapters/google.py::completar
 adapters/google.py::preparar
-adapters/openai.py::completar
-adapters/openai.py::preparar

@@ -10,7 +10,7 @@ import pytest
 
 import curupira
 from curupira.adapters.base import Mensagem, ParametrosDeAmostragem
-from curupira.adapters.openai import AdaptadorOpenAI
+from curupira.adapters.google import AdaptadorGoogle
 
 
 def _todos_os_modulos() -> list[str]:
@@ -36,20 +36,23 @@ def test_stub_falha_alto_e_nao_devolve_valor_errado() -> None:
     """Um stub tem que estourar, não devolver `None` e contaminar um relatório.
 
     Aponta de propósito para uma ponta solta ainda aberta. Quando `preparar` do
-    adaptador da OpenAI for implementado, este teste falha e obriga a escolher
+    adaptador do Google for implementado, este teste falha e obriga a escolher
     outro alvo — ou a apagar o teste, se não sobrar stub nenhum.
 
     A auto-destruição é o recurso, não o defeito: o teste vira um lembrete que
     não dá para ignorar. Alvos já aposentados por terem sido implementados:
-    `cep.validar` (Entrega 6) e `boleto.validar` (Entrega 7).
+    `cep.validar` (Entrega 6), `boleto.validar` (Entrega 7) e
+    `AdaptadorOpenAI.preparar` (Entrega 8).
 
-    Restam quatro stubs, todos em `adapters`: `preparar` e `completar` da OpenAI
-    e do Google. Quando o último cair, apague este teste **e** a linha
-    `raise NotImplementedError` de `exclude_lines` no `pyproject.toml` — enquanto
-    ela existir, uma função esquecida sem implementação não derruba a cobertura.
+    Restam dois stubs, os dois do Google, e eles estão parados por uma decisão
+    em aberto, não por esquecimento: o Gemini tem duas APIs vigentes e a escolha
+    entre elas ainda não foi feita (ADR 0004). Quando o último cair, apague este
+    teste **e** a linha `raise NotImplementedError` de `exclude_lines` no
+    `pyproject.toml` — enquanto ela existir, uma função esquecida sem
+    implementação não derruba a cobertura.
     """
     with pytest.raises(NotImplementedError):
-        AdaptadorOpenAI().preparar(
+        AdaptadorGoogle().preparar(
             modelo="m",
             mensagens=(Mensagem(role="user", content="oi"),),
             ferramentas=(),

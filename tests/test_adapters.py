@@ -356,24 +356,40 @@ def test_converter_sem_input_nao_inventa_raw_arguments() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_esqueletos_declaram_identidade_e_estouram_alto() -> None:
-    """O contrato ja vale; a implementacao entra na Entrega 5.
+def test_o_esqueleto_do_google_declara_identidade_e_estoura_alto() -> None:
+    """O contrato já vale; a implementação está parada por decisão, não esquecimento.
 
-    Um esqueleto que devolvesse resposta vazia em vez de estourar produziria uma
-    coluna de zeros no leaderboard com cara de medicao.
+    O Gemini tem duas APIs vigentes — `generateContent`, suportada, e
+    Interactions, recomendada desde jun/2026 — e a escolha entre elas ainda não
+    foi feita. Ver ADR 0004.
+
+    Enquanto isso, o esqueleto **estoura**. Um esqueleto que devolvesse resposta
+    vazia produziria uma coluna de zeros no leaderboard com cara de medição, o
+    que é pior do que coluna nenhuma: zero se lê como "o agente errou tudo".
     """
-    pendentes: list[AdaptadorDeModelo] = [AdaptadorOpenAI(), AdaptadorGoogle()]
-    assert [a.nome for a in pendentes] == ["openai", "google"]
-    assert [a.versao for a in pendentes] == ["0.1.0", "0.1.0"]
-    assert [a.suporta_seed for a in pendentes] == [True, False]
-    for adaptador in pendentes:
-        with pytest.raises(NotImplementedError):
-            adaptador.preparar(
-                modelo="m",
-                mensagens=MENSAGENS,
-                ferramentas=(),
-                parametros=ParametrosDeAmostragem(),
-            )
+    pendente: AdaptadorDeModelo = AdaptadorGoogle()
+    assert pendente.nome == "google"
+    assert pendente.versao == "0.1.0"
+    assert pendente.suporta_seed is False
+    with pytest.raises(NotImplementedError):
+        pendente.preparar(
+            modelo="m",
+            mensagens=MENSAGENS,
+            ferramentas=(),
+            parametros=ParametrosDeAmostragem(),
+        )
+
+
+def test_a_openai_deixou_de_ser_esqueleto() -> None:
+    """Contraparte do teste acima: o que saiu da lista de pendências funciona.
+
+    Sem este par, apagar uma linha de `stubs_pendentes.txt` sem implementar nada
+    passaria batido — o inventário confere a árvore, não o comportamento.
+    """
+    requisicao = AdaptadorOpenAI().preparar(
+        modelo="m", mensagens=MENSAGENS, ferramentas=(), parametros=ParametrosDeAmostragem()
+    )
+    assert requisicao.corpo["model"] == "m"
 
 
 # --------------------------------------------------------------------------

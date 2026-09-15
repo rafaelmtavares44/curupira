@@ -55,6 +55,20 @@ class RespostaCrua(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
 
+    provider_fingerprint: str | None = None
+    """Identificador do backend que atendeu a requisição, quando o provedor dá um.
+
+    A OpenAI devolve `system_fingerprint` e declara o efeito da `seed` como
+    *best-effort*: mesma seed, mesmo corpo, e ainda assim o resultado pode mudar
+    se o backend mudou. O fingerprint é a **única evidência verificável** de que
+    não mudou.
+
+    Sem ele, dizer "a rodada usou seed" é promessa; com ele, é conferível — duas
+    rodadas com o mesmo fingerprint e resultados diferentes são um achado, e com
+    fingerprints diferentes não são comparáveis. É `None` em provedor que não
+    expõe nada equivalente, e essa ausência também é informação.
+    """
+
 
 class IdentidadeDoAgente(BaseModel):
     """O que está sendo pontuado.
