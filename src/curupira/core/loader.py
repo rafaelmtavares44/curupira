@@ -57,6 +57,15 @@ MATCHER_DE_DATA = "data_iso"
 PARTES_DE_UM_PAR = 2
 """pt-BR e en-US. Um par com um lado so ja e pego por `par-completo`."""
 
+TETO_DAS_NOTAS_DE_PARIDADE = 700
+"""Caracteres. Cabe o que muda NESTE par; nao cabe o boilerplate do projeto.
+
+As notas dos pares `money-*`, congelados na v0.1, tem cerca de 1100 caracteres
+e doze das dezoito linhas sao convencao do dataset repetida. Foi nesse mar de
+texto que uma nota copiada de outra tarefa passou por revisao humana sem ser
+notada. Por isso a regra vale so para tarefa livre: ver `ids_congelados`.
+"""
+
 
 class Severidade(StrEnum):
     """Gravidade de um problema encontrado pelo lint."""
@@ -616,6 +625,61 @@ _REGRAS = (
 )
 
 
+def ids_congelados(suites: Sequence[Suite]) -> frozenset[str]:
+    """Os ids de toda tarefa que já entrou em alguma suíte congelada.
+
+    Serve às **regras que só valem para tarefa livre**. Pela ADR 0008 a tarefa
+    congelada é imutável, então cobrar dela uma regra escrita depois do
+    congelamento é pedir o impossível: obedecer exigiria editá-la, e editá-la é
+    justamente o que o `congelada-mudou` proíbe.
+
+    Uma regra nova, portanto, governa o que ainda pode mudar. O que já está
+    congelado é julgado pelas regras que existiam quando foi congelado, e
+    corrigido por errata quando estiver errado.
+
+    Args:
+        suites: as suítes congeladas encontradas no repositório.
+
+    Returns:
+        O conjunto de ids congelados. Vazio quando não há suíte nenhuma — e aí
+        toda tarefa é livre, que é o estado de quem está começando.
+    """
+    return frozenset(entrada.task_id for suite in suites for entrada in suite.entries)
+
+
+def _lint_notas_especificas(
+    tarefas: Sequence[Tarefa], congelados: frozenset[str]
+) -> list[ProblemaDeLint]:
+    """`parity_notes` longo demais é `parity_notes` que ninguém lê.
+
+    O defeito que motivou esta regra: a nota do `t2-date-0002` foi copiada da
+    do `t2-date-0001` e descrevia **datas que não estão naquela tarefa** — e a
+    tarefa passou por revisão humana assim. O campo tinha dezoito linhas, doze
+    das quais eram convenção do projeto repetida em todo arquivo, e o trecho
+    específico ficou enterrado no meio.
+
+    O teto não confere se a nota é verdadeira; nenhum lint confere. Ele força a
+    nota a ser **curta o bastante para ser lida**, e joga a convenção comum para
+    o `tasks/README.md`, onde ela é escrita uma vez. É o que dá para automatizar
+    do problema real.
+    """
+    return [
+        _aviso(
+            "notas-de-paridade-especificas",
+            tarefa.id,
+            f"parity_notes tem {len(tarefa.parity_notes or '')} caracteres; o teto "
+            f"e {TETO_DAS_NOTAS_DE_PARIDADE}. A nota descreve o que muda NESTE par; "
+            "a convencao que vale para o dataset inteiro mora em tasks/README.md. "
+            "Nota longa e nota que ninguem le, e foi assim que uma nota copiada de "
+            "outra tarefa passou pela revisao",
+        )
+        for tarefa in tarefas
+        if tarefa.id not in congelados
+        and tarefa.parity_notes
+        and len(tarefa.parity_notes) > TETO_DAS_NOTAS_DE_PARIDADE
+    ]
+
+
 def lint_do_congelamento(
     tarefas: Sequence[Tarefa], suites: Sequence[Suite]
 ) -> list[ProblemaDeLint]:
@@ -696,6 +760,7 @@ def lint_do_dataset(
     problemas: list[ProblemaDeLint] = []
     for regra in _REGRAS:
         problemas.extend(regra(tarefas))
+    problemas.extend(_lint_notas_especificas(tarefas, ids_congelados(suites)))
     problemas.extend(lint_do_congelamento(tarefas, suites))
 
     if estrito:

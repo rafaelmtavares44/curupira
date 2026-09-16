@@ -17,20 +17,14 @@ tags: [data, convencao-dd-mm, propenso-a-falha-silenciosa]
 pair_id: date-0001
 parity: strict
 parity_notes: >-
-  Apenas o idioma e a convencao de data correspondente mudam entre as duas
-  versoes. Mesma ferramenta, mesmo gabarito em ISO, mesma dificuldade, mesmo
-  numero de passos. Nenhuma adaptacao cultural: o titulo da reuniao e neutro e
-  a data alvo e a mesma.
-  CONTROLE DELIBERADO: os identificadores de ferramenta e de argumento sao
-  mantidos IDENTICOS nas duas versoes (`agendar_reuniao`, `data_iso`,
-  `titulo`), em portugues. Traduzi-los mudaria duas coisas ao mesmo tempo e o
-  Delta deixaria de isolar a lingua natural. So a descricao da ferramenta e a
-  mensagem do usuario mudam de idioma.
-  SIMETRIA, ao contrario do par money-*: aqui as duas versoes tem a MESMA
-  ambiguidade intrinseca. `05/03/2026` lido como mes-dia e `03/05/2026` lido
-  como dia-mes produzem o MESMO valor errado, `2026-05-03`. A assimetria que a
-  ADR 0005 D3 teve de declarar no separador decimal nao existe nesta familia, e
-  e por isso que ela e o par strict mais limpo do dataset.
+  Apenas o idioma e a convencao de data correspondente mudam: `05/03/2026`
+  em pt-BR, `03/05/2026` em en-US. Mesma ferramenta, mesmo gabarito ISO
+  (2026-03-05), mesma dificuldade, mesmo numero de passos.
+  SIMETRIA, ao contrario do par money-*: as duas versoes tem a MESMA
+  ambiguidade intrinseca, e o erro tipico leva ao MESMO valor errado,
+  2026-05-03. A assimetria que a ADR 0005 D3 teve de declarar no separador
+  decimal nao existe aqui, e e por isso que este e o par strict mais limpo
+  do dataset.
 generated_from: pt-BR
 
 # Familia: as tarefas date-* nascem do mesmo molde -- data numerica curta que

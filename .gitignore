@@ -54,3 +54,9 @@ desktop.ini
 # Held-out: nunca, em hipotese alguma, dentro deste repositorio.
 heldout/
 tasks/**/held_out/
+
+# Rascunho de mensagem de commit. O PowerShell nao aceita here-document do
+# bash, entao mensagem multi-linha vai por arquivo mais `git commit -F`. Esse
+# arquivo e andaime: se o `git add -A` rodar depois dele existir, ele entra no
+# commit junto. Ignorar de uma vez e mais barato que lembrar toda entrega.
+msg-commit.txt

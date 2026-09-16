@@ -17,11 +17,12 @@ from curupira.core.loader import (
     Severidade,
     carregar_diretorio,
     carregar_tarefa,
+    ids_congelados,
     lint_do_dataset,
     tem_erro,
 )
 from curupira.core.registry import limpar_registro
-from curupira.core.suite import Suite, congelar
+from curupira.core.suite import Suite, carregar_suites, congelar
 from curupira.core.task import Tarefa
 from curupira.formatos import registrar_validadores
 from curupira.matchers import registrar_todos
@@ -426,10 +427,20 @@ def test_problemas_saem_com_erros_primeiro() -> None:
 
 
 def test_dataset_real_do_repositorio_passa_no_lint(raiz_do_repo: Path) -> None:
-    """O teste que importa: o dataset que está no git obedece às próprias regras."""
+    """O teste que importa: o dataset que está no git obedece às próprias regras.
+
+    **As suítes reais entram na chamada**, como o `curupira validate` faz. Sem
+    elas o teste lintava um mundo que não existe — um em que nada foi congelado
+    — e divergia do portão que roda no CI. Divergência entre o teste e o
+    comando real já custou caro nesta base: era exatamente o defeito que o
+    `ci.yml` tinha ao rodar uma segunda cópia do `detect-secrets` sem os mesmos
+    argumentos do pre-commit.
+    """
     tarefas = list(carregar_diretorio(raiz_do_repo / "tasks"))
+    suites = carregar_suites(raiz_do_repo / "suites")
     assert len(tarefas) >= 4
-    assert lint_do_dataset(tarefas, estrito=True) == []
+    assert suites, "o repositorio tem a v0.1 congelada; sem ela o teste linta outro mundo"
+    assert lint_do_dataset(tarefas, estrito=True, suites=suites) == []
 
 
 def test_expect_que_nao_e_tool_call_passa_intacto(tmp_path: Path) -> None:
@@ -605,3 +616,69 @@ def test_sem_suite_nenhuma_o_lint_nao_cobra_congelamento() -> None:
     """Dataset novo, antes de qualquer congelamento, é estado legítimo."""
     problemas = lint_do_dataset(_tarefas(*par_strict()))
     assert "congelada-mudou" not in _regras(problemas)
+
+
+# --------------------------------------------------------------------------
+# Regra nova só governa tarefa livre
+# --------------------------------------------------------------------------
+
+
+NOTA_LONGA = "Nota de paridade deliberadamente longa. " * 30
+
+
+def test_nota_de_paridade_longa_e_acusada_em_tarefa_livre() -> None:
+    """O campo que era grande demais para ser lido — e por isso não foi lido.
+
+    A nota do `t2-date-0002` tinha dezoito linhas, doze delas convenção do
+    projeto repetida em todo arquivo, e descrevia **datas que não estavam
+    naquela tarefa**: copiada da tarefa irmã e nunca reescrita. Passou por
+    revisão humana assim.
+    """
+    pt, en = par_strict()
+    pt["parity_notes"] = NOTA_LONGA
+    problemas = lint_do_dataset(_tarefas(pt, en))
+
+    assert "notas-de-paridade-especificas" in _regras(problemas)
+
+
+def test_nota_curta_nao_gera_problema() -> None:
+    assert "notas-de-paridade-especificas" not in _regras(lint_do_dataset(_tarefas(*par_strict())))
+
+
+def test_regra_nova_nao_cobra_tarefa_ja_congelada() -> None:
+    """O ponto da regra escopada, e o motivo de `ids_congelados` existir.
+
+    Uma regra escrita **depois** do congelamento não pode governar o que foi
+    congelado: obedecer exigiria editar a tarefa, e editá-la é exatamente o que
+    o `congelada-mudou` proíbe. Cobrar as duas coisas ao mesmo tempo seria um
+    beco sem saída — e é o caso real dos pares `money-*` da v0.1, cujas notas
+    passam de mil caracteres.
+    """
+    pt, en = par_strict()
+    pt["parity_notes"] = NOTA_LONGA
+    en["parity_notes"] = NOTA_LONGA
+    tarefas = _tarefas(pt, en)
+
+    livre = lint_do_dataset(tarefas)
+    congelado = lint_do_dataset(tarefas, suites=[_congelada(tarefas)])
+
+    assert "notas-de-paridade-especificas" in _regras(livre)
+    assert "notas-de-paridade-especificas" not in _regras(congelado)
+    assert "congelada-mudou" not in _regras(congelado), "a tarefa nao mudou, so a regra"
+
+
+def test_ids_congelados_reune_todas_as_suites() -> None:
+    """Duas suítes congelam conjuntos diferentes; a proteção é a união deles."""
+    primeira = congelar(_tarefas(*par_strict("a-0001")), suite_id="v0.1")
+    segunda = congelar(_tarefas(*par_strict("b-0002")), suite_id="v0.2")
+
+    assert ids_congelados([primeira, segunda]) == {
+        "a-0001-pt",
+        "a-0001-en",
+        "b-0002-pt",
+        "b-0002-en",
+    }
+
+
+def test_sem_suite_nenhuma_toda_tarefa_e_livre() -> None:
+    assert ids_congelados([]) == frozenset()
