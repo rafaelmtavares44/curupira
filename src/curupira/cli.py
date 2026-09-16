@@ -36,14 +36,20 @@ from curupira.core.loader import (
     lint_do_dataset,
     tem_erro,
 )
+from curupira.core.referencia import problema as problema_da_referencia
 from curupira.core.registry import limpar_registro
 from curupira.core.result import RegistroDaRodada
 from curupira.core.suite import (
+    SUFIXO_DA_ERRATA,
+    EntradaDeErrata,
     Suite,
+    acrescentar,
     carregar_errata,
     carregar_suite,
     carregar_suites,
     congelar,
+    errata_vazia,
+    gravar_errata,
     gravar_suite,
     suite_esta_morta,
     verificar_suite,
@@ -797,6 +803,160 @@ def serve(
         f"  proximo passo: curupira score {saida}",
         style="green",
     )
+
+
+errata_app = typer.Typer(help="Registrar tarefas defeituosas sem tocar na suite.")
+app.add_typer(errata_app, name="errata")
+
+
+@errata_app.command("add")
+def errata_add(
+    suite: Annotated[str, typer.Argument(help="Id da suite, ex.: v0.1.")],
+    tarefa: Annotated[str, typer.Option(help="Id da tarefa defeituosa.")],
+    defeito: Annotated[str, typer.Option(help="O que esta errado na tarefa.")],
+    teste: Annotated[str, typer.Option(help="tests/arquivo.py::nome_do_teste que reproduz.")],
+    substituida_por: Annotated[
+        str | None, typer.Option(help="Id da tarefa NOVA que corrige esta.")
+    ] = None,
+    tarefas: Annotated[Path, typer.Option(help="Raiz do dataset.")] = Path("tasks"),
+    destino: Annotated[Path, typer.Option(help="Diretorio das suites.")] = Path("suites"),
+    raiz: Annotated[Path, typer.Option(help="Raiz do repositorio, para achar o teste.")] = Path(),
+) -> None:
+    """Marca uma tarefa como defeituosa SEM tocar na suite congelada.
+
+    Este e o caminho certo quando uma tarefa ja congelada esta errada, e ele
+    existe porque a alternativa foi tentada e falhou: a v0.1 foi recongelada
+    tres vezes entre as Entregas 9 e 11 (ADR 0008).
+
+    O que e conferido antes de gravar:
+
+    - a tarefa esta MESMO na suite;
+    - o `--teste` aponta para uma funcao que EXISTE. Sem isso, `test_ref` seria
+      texto livre que ninguem le, e a trava contra "o modelo X vai mal nessa
+      tarefa" nao travaria nada;
+    - a `--substituida-por`, se dada, existe e esta na MESMA familia. Familia
+      diferente faria o bootstrap contar duas observacoes onde ha uma.
+    """
+    _preparar_registro()
+    congelada, _ = _suite_do_disco(destino, suite)
+    dataset = _dataset(tarefas)
+
+    if tarefa not in {entrada.task_id for entrada in congelada.entries}:
+        erro_console.print(f"'{tarefa}' nao esta congelada na suite '{suite}'", style="red")
+        raise typer.Exit(code=CODIGO_DE_USO)
+
+    defeituosa = dataset.get(tarefa)
+    if defeituosa is None:
+        erro_console.print(f"'{tarefa}' nao existe no dataset", style="red")
+        raise typer.Exit(code=CODIGO_DE_USO)
+
+    falha = problema_da_referencia(raiz, teste)
+    if falha is not None:
+        erro_console.print(f"referencia de teste invalida: {falha}", style="red")
+        erro_console.print(
+            "Errata exige defeito demonstravel. Escreva o teste que reproduz o "
+            "problema ANTES de registrar a errata.",
+            style="yellow",
+        )
+        raise typer.Exit(code=CODIGO_DE_USO)
+
+    if substituida_por is not None:
+        _conferir_substituta(dataset, defeituosa, substituida_por)
+
+    caminho = destino / f"{suite}{SUFIXO_DA_ERRATA}"
+    atual = carregar_errata(caminho) if caminho.is_file() else errata_vazia(suite)
+    entrada = EntradaDeErrata(
+        task_id=tarefa,
+        task_version=defeituosa.task_version,
+        date=datetime.now(UTC).date(),
+        defect=defeito,
+        test_ref=teste,
+        replaced_by=substituida_por,
+    )
+    try:
+        nova = acrescentar(atual, entrada)
+    except ValueError as conflito:
+        erro_console.print(str(conflito), style="red", markup=False)
+        raise typer.Exit(code=CODIGO_DE_USO) from conflito
+
+    gravar_errata(nova, caminho)
+    console.print(
+        f"errata da suite '{suite}' na revisao {nova.revision}: "
+        f"{len(nova.entries)} tarefa(s) marcada(s)\n  {caminho}",
+        style="green",
+    )
+    if suite_esta_morta(congelada, nova):
+        erro_console.print(
+            f"\nSUITE MORTA: a errata passou do tolerado em '{suite}'. Encerre esta "
+            "suite e corte a proxima, em vez de continuar remendando.",
+            style="red",
+        )
+        raise typer.Exit(code=1)
+
+
+def _conferir_substituta(dataset: dict[str, Tarefa], defeituosa: Tarefa, substituta: str) -> None:
+    """Confere que a tarefa que corrige existe e esta na mesma familia.
+
+    Args:
+        dataset: o dataset carregado.
+        defeituosa: a tarefa que vai para a errata.
+        substituta: o id da tarefa que a corrige.
+
+    Raises:
+        typer.Exit: se a substituta nao existir ou estiver em outra familia.
+    """
+    nova = dataset.get(substituta)
+    if nova is None:
+        erro_console.print(
+            f"'{substituta}' nao existe no dataset. A correcao e uma tarefa NOVA: "
+            "escreva-a antes de registrar a errata.",
+            style="red",
+        )
+        raise typer.Exit(code=CODIGO_DE_USO)
+    if nova.family_id != defeituosa.family_id:
+        erro_console.print(
+            f"'{substituta}' esta na familia '{nova.family_id}' e '{defeituosa.id}' "
+            f"na '{defeituosa.family_id}'. A correcao herda a familia da tarefa que "
+            "substitui: familias diferentes fariam o bootstrap contar duas "
+            "observacoes onde ha uma (ADR 0006).",
+            style="red",
+        )
+        raise typer.Exit(code=CODIGO_DE_USO)
+
+
+@errata_app.command("show")
+def errata_show(
+    suite: Annotated[str, typer.Argument(help="Id da suite, ex.: v0.1.")],
+    destino: Annotated[Path, typer.Option(help="Diretorio das suites.")] = Path("suites"),
+) -> None:
+    """Mostra a errata de uma suite, e se ela ainda esta viva."""
+    congelada, _ = _suite_do_disco(destino, suite)
+    caminho = destino / f"{suite}{SUFIXO_DA_ERRATA}"
+    if not caminho.is_file():
+        console.print(f"a suite '{suite}' nao tem errata", style="green")
+        return
+
+    atual = carregar_errata(caminho)
+    tabela = Table(box=box.SIMPLE)
+    for coluna in ("tarefa", "versao", "data", "defeito", "teste", "substituida por"):
+        tabela.add_column(coluna)
+    for entrada in atual.entries:
+        tabela.add_row(
+            entrada.task_id,
+            str(entrada.task_version),
+            entrada.date.isoformat(),
+            entrada.defect,
+            entrada.test_ref,
+            entrada.replaced_by or "-",
+        )
+    console.print(tabela)
+    console.print(
+        f"revisao {atual.revision} · {len(atual.entries)} de {len(congelada.entries)} tarefas",
+        style="bold",
+    )
+    if suite_esta_morta(congelada, atual):
+        erro_console.print("SUITE MORTA: corte a proxima.", style="red")
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":  # pragma: no cover

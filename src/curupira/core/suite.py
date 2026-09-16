@@ -193,6 +193,66 @@ def carregar_suite(caminho: Path) -> Suite:
     return Suite.model_validate(yaml.safe_load(caminho.read_text(encoding="utf-8")))
 
 
+def gravar_errata(errata: Errata, caminho: Path) -> None:
+    """Grava a errata em YAML.
+
+    Args:
+        errata: a errata a persistir.
+        caminho: o arquivo de destino.
+    """
+    gravar_texto(
+        caminho,
+        yaml.safe_dump(errata.model_dump(mode="json"), sort_keys=False, allow_unicode=True),
+    )
+
+
+def acrescentar(errata: Errata, entrada: EntradaDeErrata) -> Errata:
+    """Acrescenta uma entrada à errata, subindo a revisão.
+
+    **Append-only**: nada é removido, nunca. Uma errata que pudesse perder
+    entradas seria edição silenciosa com mais passos — e a suíte voltaria a poder
+    ser remendada sem deixar rastro, que é o que a ADR 0008 fechou.
+
+    A revisão sobe a cada acréscimo porque ela entra no registro da rodada: duas
+    rodadas com revisões diferentes viram números diferentes **sobre o mesmo
+    dataset**, e isso precisa ser legível.
+
+    Args:
+        errata: a errata vigente.
+        entrada: a tarefa defeituosa a acrescentar.
+
+    Returns:
+        Uma errata nova, com a entrada e a revisão seguinte.
+
+    Raises:
+        ValueError: se a tarefa já estiver na errata. Repetir uma entrada
+            esconderia qual dos dois defeitos vale.
+    """
+    if any(existente.task_id == entrada.task_id for existente in errata.entries):
+        msg = (
+            f"'{entrada.task_id}' ja esta na errata da suite '{errata.suite_id}'. "
+            "Errata e append-only: para trocar o defeito descrito, corte a proxima suite"
+        )
+        raise ValueError(msg)
+    return Errata(
+        suite_id=errata.suite_id,
+        revision=errata.revision + 1,
+        entries=(*errata.entries, entrada),
+    )
+
+
+def errata_vazia(suite_id: str) -> Errata:
+    """Monta a errata inicial de uma suíte que ainda não tem nenhuma.
+
+    Args:
+        suite_id: a suíte.
+
+    Returns:
+        Uma errata na revisão zero, sem entradas.
+    """
+    return Errata(suite_id=suite_id, revision=0, entries=())
+
+
 def carregar_errata(caminho: Path) -> Errata:
     """Carrega a errata de uma suíte.
 

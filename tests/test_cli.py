@@ -9,6 +9,7 @@ import pkgutil
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import pytest
@@ -32,6 +33,7 @@ from curupira.report.aggregate import MetricasDaTrilha, RelatorioDaRodada
 from tests.fabricas import par_strict, tarefa_bruta
 
 runner = CliRunner()
+RAIZ_DO_PROJETO = Path(__file__).resolve().parent.parent
 
 
 def _saida(resultado: object) -> str:
@@ -881,3 +883,155 @@ def test_a_chave_de_cada_provedor_tem_o_prefixo_do_projeto() -> None:
     """
     for provedor, variavel in sorted(VARIAVEL_DA_CHAVE.items()):
         assert variavel.startswith("CURUPIRA_"), f"{provedor}: {variavel}"
+
+
+# --------------------------------------------------------------------------
+# `curupira errata add` — o caminho certo, com menos atrito que o errado
+# --------------------------------------------------------------------------
+
+TESTE_QUE_EXISTE = "tests/test_cli.py::test_ajuda_lista_os_comandos"
+
+
+@pytest.fixture
+def congelado(dataset: Path, tmp_path: Path) -> Path:
+    """Congela a v0.1 sobre o dataset de teste e devolve o diretório das suítes."""
+    suites = tmp_path / "suites"
+    comum = ["--tarefas", str(dataset), "--destino", str(suites)]
+    assert runner.invoke(app, ["suite", "freeze", "v0.1", *comum]).exit_code == 0
+    return suites
+
+
+def _errata_add(dataset: Path, suites: Path, **opcoes: str) -> Any:
+    """Chama `errata add` com os caminhos de teste já preenchidos.
+
+    O retorno é o `Result` do click, que não tem stubs de tipo publicados. O
+    resto do arquivo usa `runner.invoke` sem anotação e o mypy infere; aqui a
+    anotação é obrigatória, e `Any` é o que o projeto já permite em testes.
+    """
+    argumentos = [
+        "errata",
+        "add",
+        "v0.1",
+        "--tarefas",
+        str(dataset),
+        "--destino",
+        str(suites),
+        "--raiz",
+        str(RAIZ_DO_PROJETO),
+    ]
+    for chave, valor in opcoes.items():
+        argumentos += [f"--{chave.replace('_', '-')}", valor]
+    return runner.invoke(app, argumentos)
+
+
+def test_errata_add_grava_e_sobe_a_revisao(dataset: Path, congelado: Path) -> None:
+    """O caminho feliz: uma tarefa defeituosa sai do agregado sem tocar na suíte."""
+    alvo = next(dataset.glob("*-pt.yaml")).stem
+
+    resultado = _errata_add(
+        dataset, congelado, tarefa=alvo, defeito="gabarito ambiguo", teste=TESTE_QUE_EXISTE
+    )
+
+    assert resultado.exit_code == 0, resultado.output
+    gravada = yaml.safe_load((congelado / "v0.1.errata.yaml").read_text(encoding="utf-8"))
+    assert gravada["revision"] == 1
+    assert gravada["entries"][0]["task_id"] == alvo
+    assert gravada["entries"][0]["test_ref"] == TESTE_QUE_EXISTE
+
+
+def test_errata_recusa_teste_que_nao_existe(dataset: Path, congelado: Path) -> None:
+    """A trava que faltava: `test_ref` era texto livre que ninguém conferia.
+
+    Sem esta checagem, "errata exige defeito demonstrável" era uma frase no
+    docstring, não uma garantia — e nada separava um gabarito errado de um
+    modelo que foi mal.
+    """
+    alvo = next(dataset.glob("*-pt.yaml")).stem
+
+    resultado = _errata_add(
+        dataset,
+        congelado,
+        tarefa=alvo,
+        defeito="gabarito ambiguo",
+        teste="tests/test_que_nunca_existiu.py::test_x",
+    )
+
+    assert resultado.exit_code != 0
+    assert not (congelado / "v0.1.errata.yaml").exists()
+
+
+def test_errata_recusa_tarefa_fora_da_suite(dataset: Path, congelado: Path) -> None:
+    """Errata é sobre o que está congelado; o resto se corrige editando."""
+    resultado = _errata_add(
+        dataset, congelado, tarefa="nao-congelada-0001", defeito="x", teste=TESTE_QUE_EXISTE
+    )
+    assert resultado.exit_code != 0
+
+
+def test_errata_e_append_only(dataset: Path, congelado: Path) -> None:
+    """Repetir uma entrada esconderia qual dos dois defeitos vale."""
+    alvo = next(dataset.glob("*-pt.yaml")).stem
+    comum = {"tarefa": alvo, "teste": TESTE_QUE_EXISTE}
+
+    assert _errata_add(dataset, congelado, defeito="primeiro", **comum).exit_code == 0
+    repetida = _errata_add(dataset, congelado, defeito="segundo", **comum)
+
+    assert repetida.exit_code != 0
+    assert "append-only" in _saida(repetida)
+
+
+def test_errata_recusa_substituta_inexistente(dataset: Path, congelado: Path) -> None:
+    """A correção é uma tarefa NOVA: ela precisa existir antes da errata."""
+    alvo = next(dataset.glob("*-pt.yaml")).stem
+
+    resultado = _errata_add(
+        dataset,
+        congelado,
+        tarefa=alvo,
+        defeito="x",
+        teste=TESTE_QUE_EXISTE,
+        substituida_por="tarefa-que-ninguem-escreveu",
+    )
+
+    assert resultado.exit_code != 0
+
+
+def test_errata_avisa_quando_a_suite_morre(dataset_grande: Path, tmp_path: Path) -> None:
+    """Passando do tolerado, o comando falha e manda cortar a próxima suíte."""
+    suites = tmp_path / "suites"
+    comum = ["--tarefas", str(dataset_grande), "--destino", str(suites)]
+    assert runner.invoke(app, ["suite", "freeze", "v0.1", *comum]).exit_code == 0
+
+    for indice in range(3):
+        resultado = _errata_add(
+            dataset_grande,
+            suites,
+            tarefa=f"g{indice:03d}",
+            defeito="gabarito errado",
+            teste=TESTE_QUE_EXISTE,
+        )
+
+    assert resultado.exit_code != 0
+    assert "MORTA" in _saida(resultado)
+
+
+def test_errata_show_sem_errata_nao_e_erro(congelado: Path) -> None:
+    """Suíte sem errata é o estado normal, e o comando precisa dizer isso."""
+    resultado = runner.invoke(app, ["errata", "show", "v0.1", "--destino", str(congelado)])
+    assert resultado.exit_code == 0
+    assert "nao tem errata" in _saida(resultado)
+
+
+def test_errata_show_lista_o_que_foi_marcado(dataset: Path, congelado: Path) -> None:
+    alvo = next(dataset.glob("*-pt.yaml")).stem
+    assert (
+        _errata_add(
+            dataset, congelado, tarefa=alvo, defeito="gabarito ambiguo", teste=TESTE_QUE_EXISTE
+        ).exit_code
+        == 0
+    )
+
+    resultado = runner.invoke(app, ["errata", "show", "v0.1", "--destino", str(congelado)])
+
+    assert resultado.exit_code == 0
+    assert "revisao 1" in _saida(resultado)
