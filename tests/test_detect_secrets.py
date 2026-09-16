@@ -41,6 +41,9 @@ import yaml
 
 RAIZ = Path(__file__).resolve().parent.parent
 CONFIG = RAIZ / ".pre-commit-config.yaml"
+WORKFLOW = RAIZ / ".github" / "workflows" / "ci.yml"
+
+MODULO_DO_HOOK = "detect_secrets.pre_commit_hook"
 
 SHA256_DE_EXEMPLO = "4136fdcb42d97daff5103a3fbbf6bee6ec719fdd2c69bd2367d6a5f3acce5ea0"
 """Um SHA-256 qualquer, com a forma exata que a exclusão libera."""
@@ -167,4 +170,63 @@ def test_este_arquivo_nao_reprova_o_proprio_hook() -> None:
     assert not _acusa_arquivo(Path(__file__)), (
         "este arquivo tem uma amostra escrita como literal. Monte-a em tempo de "
         "execucao, como as outras, em vez de afrouxar a exclusao."
+    )
+
+
+# --------------------------------------------------------------------------
+# O CI e o portão local rodam a MESMA política
+# --------------------------------------------------------------------------
+
+
+def _politica(comando: str) -> tuple[str, ...]:
+    """Extrai os argumentos passados ao hook, seja qual for o invólucro.
+
+    O portão local chama o módulo direto; o CI o alimenta com
+    `git ls-files | xargs`. O invólucro difere de propósito — um examina o que
+    está no índice, o outro o repositório inteiro. O que **não** pode diferir é
+    o que vem depois do nome do módulo.
+
+    Args:
+        comando: a linha de comando completa.
+
+    Returns:
+        Os argumentos depois do módulo, em ordem.
+
+    Raises:
+        ValueError: se o comando não invocar o hook.
+    """
+    partes = shlex.split(comando)
+    if MODULO_DO_HOOK not in partes:
+        msg = f"o comando nao invoca {MODULO_DO_HOOK}: {comando!r}"
+        raise ValueError(msg)
+    return tuple(partes[partes.index(MODULO_DO_HOOK) + 1 :])
+
+
+def _comando_do_ci() -> str:
+    """Lê o passo `detect-secrets` do workflow de CI.
+
+    Returns:
+        O `run` do passo.
+    """
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    passos = workflow["jobs"]["seguranca"]["steps"]
+    return str(next(p["run"] for p in passos if p.get("name") == "detect-secrets"))
+
+
+def test_o_ci_e_o_pre_commit_declaram_a_mesma_politica() -> None:
+    """Duas cópias da linha de comando, uma política só.
+
+    Este teste existe por um erro concreto: a exclusão dos SHA-256 foi
+    adicionada ao `.pre-commit-config.yaml` e não ao `ci.yml`. O portão local
+    ficou verde, o CI ficou vermelho, e o comentário dentro do proprio `ci.yml`
+    continuou afirmando que os dois rodavam o mesmo comando.
+
+    Comentário não é garantia. Isto é.
+    """
+    do_pre_commit = _politica(" ".join(shlex.quote(a) for a in _argumentos_do_hook()[1:]))
+    do_ci = _politica(_comando_do_ci())
+
+    assert do_ci == do_pre_commit, (
+        f"o CI roda {do_ci} e o pre-commit roda {do_pre_commit}. Um portao local "
+        "que nao reproduz o CI nao e portao: ele so adia a descoberta."
     )

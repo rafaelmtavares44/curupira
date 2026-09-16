@@ -119,11 +119,19 @@ jobs:
       # --exit-code` depois dele falha SEMPRE — o job ficava vermelho por
       # construcao, e o CI vermelho por construcao e como CI desligado.
       #
-      # `detect-secrets-hook` VERIFICA sem reescrever, e e exatamente o mesmo
-      # comando do pre-commit. CI e portao local rodando o mesmo comando e o
-      # unico jeito de o portao local significar alguma coisa.
+      # `detect-secrets-hook` VERIFICA sem reescrever.
+      #
+      # SEGUNDO ERRO JA COMETIDO, e a razao de existir
+      # `test_o_ci_e_o_pre_commit_declaram_a_mesma_politica`: a exclusao dos
+      # SHA-256 foi adicionada ao `.pre-commit-config.yaml` e NAO aqui. O portao
+      # local ficou verde, o CI ficou vermelho, e este comentario continuou
+      # afirmando que os dois rodavam a mesma coisa. Comentario nao e garantia.
+      #
+      # O involucro DIFERE de proposito -- o pre-commit examina o que esta no
+      # indice, aqui examinamos o repositorio inteiro. O que vem depois do nome
+      # do modulo tem de ser IDENTICO, e o teste cobra isso.
       - name: detect-secrets
-        run: git ls-files -z | xargs -0 python -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
+        run: git ls-files -z | xargs -0 python -m detect_secrets.pre_commit_hook --baseline .secrets.baseline --exclude-secrets '^[0-9a-f]{64}$'
         shell: bash
 
   dataset:
