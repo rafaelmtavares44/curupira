@@ -66,9 +66,20 @@ repos:
         pass_filenames: false
         require_serial: true
 
+      # --exclude-secrets ignora um achado cujo VALOR seja exatamente 64
+      # hexadecimais minusculos: a forma de um SHA-256. Toda suite congelada
+      # tem uma linha dessas por tarefa, e sem isto o portao acusaria 60 falsos
+      # positivos numa suite de 60 tarefas -- e alguem acabaria desligando o
+      # hook inteiro, que e o desfecho ruim de verdade.
+      #
+      # Nao usamos --exclude-files aqui de proposito: cegaria tambem a errata,
+      # que mora em suites/ e tem campo de texto livre.
+      #
+      # tests/test_detect_secrets.py le esta linha e prova que o detector
+      # continua pegando chave de provedor. Mudou aqui, o teste cobra.
       - id: detect-secrets
         name: detect-secrets
-        entry: python -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
+        entry: python -m detect_secrets.pre_commit_hook --baseline .secrets.baseline --exclude-secrets ^[0-9a-f]{64}$
         language: system
         stages: [pre-commit]
         require_serial: true
