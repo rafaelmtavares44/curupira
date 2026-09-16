@@ -96,6 +96,14 @@ TEMPO_LIMITE: Final = 120.0
 lentidao do provedor em erro de infraestrutura, e erro de infraestrutura some da
 medicao — o resultado ficaria mais limpo do que a realidade."""
 
+LIMIAR_DE_INFRA: Final = 0.10
+"""Acima disto, a rodada e reportada como comprometida por infraestrutura.
+
+Dez por cento e baixo de proposito. Erro de infraestrutura nao e ruido que se
+dilui: ele REMOVE execucoes do denominador, e as que remove nao sao sorteadas —
+tendem a ser as mais lentas, as mais longas, as que estouraram limite. Uma
+rodada com 10% de erro ja esta medindo um subconjunto enviesado."""
+
 VARIAVEL_DA_CHAVE: Final = {"anthropic": "CURUPIRA_ANTHROPIC_API_KEY"}
 """De onde sai a chave de cada provedor.
 
@@ -524,6 +532,16 @@ def score(
         )
 
 
+def _pct(valor: float | None) -> str:
+    """Formata uma taxa, distinguindo zero de ausencia de medicao.
+
+    `0.0%` e uma nota: o agente foi medido e nao acertou nada. `—` e a ausencia
+    de nota: ninguem mediu. Imprimir as duas coisas igual foi o defeito que a
+    Entrega 9 encontrou — ver `MetricasDaTrilha.acuracia`.
+    """
+    return "—" if valor is None else f"{valor:.1%}"
+
+
 def _tabela_das_trilhas(relatorio: RelatorioDaRodada) -> Table:
     """Monta a tabela de metricas por trilha."""
     tabela = Table(title=f"{relatorio.agent_id} · suite {relatorio.suite_id}", box=box.SIMPLE)
@@ -536,21 +554,54 @@ def _tabela_das_trilhas(relatorio: RelatorioDaRodada) -> Table:
         "abst. indev.",
         "instab.",
         "juiz",
+        "erro infra",
     )
     for coluna in colunas:
         tabela.add_column(coluna, justify="right" if coluna != "trilha" else "left")
     for nome, m in sorted(relatorio.por_trilha.items()):
+        # A coluna de erro de infraestrutura passa a ser IMPRESSA. Ela ja existia
+        # no report.json e so o JSON a mostrava: uma rodada 100% quebrada saia na
+        # tabela como um agente que errou tudo. O numero mais importante de uma
+        # rodada ruim nao pode ficar so no arquivo.
+        infra = f"{m.fracao_com_erro_de_infraestrutura:.1%}"
         tabela.add_row(
             nome,
             str(m.n_decididas),
-            f"{m.acuracia:.1%}",
-            "—" if m.linha_de_base is None else f"{m.linha_de_base:.1%}",
-            f"{m.taxa_de_falha_silenciosa:.1%}",
-            f"{m.taxa_de_abstencao_indevida:.1%}",
-            f"{m.taxa_de_instabilidade:.1%}",
-            f"{m.fracao_pontuada_por_juiz:.1%}",
+            _pct(m.acuracia),
+            _pct(m.linha_de_base),
+            _pct(m.taxa_de_falha_silenciosa),
+            _pct(m.taxa_de_abstencao_indevida),
+            _pct(m.taxa_de_instabilidade),
+            _pct(m.fracao_pontuada_por_juiz),
+            f"[red]{infra}[/red]"
+            if m.fracao_com_erro_de_infraestrutura > LIMIAR_DE_INFRA
+            else infra,
         )
     return tabela
+
+
+def _avisar_sobre_infraestrutura(relatorio: RelatorioDaRodada) -> None:
+    """Grita quando a rodada foi comprometida por falha de infraestrutura.
+
+    Sem isto, uma rodada em que o provedor recusou toda requisicao produz uma
+    tabela cheia de travessoes e nenhuma explicacao. O leitor fica com a nota
+    vazia e sem saber por que.
+    """
+    quebradas = {
+        nome: m.fracao_com_erro_de_infraestrutura
+        for nome, m in relatorio.por_trilha.items()
+        if m.fracao_com_erro_de_infraestrutura > LIMIAR_DE_INFRA
+    }
+    if not quebradas:
+        return
+    detalhe = " · ".join(f"{nome} {fracao:.0%}" for nome, fracao in sorted(quebradas.items()))
+    erro_console.print(
+        f"\nATENCAO: erro de infraestrutura acima de {LIMIAR_DE_INFRA:.0%} em {detalhe}.\n"
+        "  Isto NAO e desempenho do agente: sao chamadas que nunca chegaram a ser "
+        "respondidas.\n  Confira a chave, o nome do modelo e a rede antes de ler "
+        "qualquer numero desta rodada.",
+        style="red",
+    )
 
 
 def _imprimir_delta(relatorio: RelatorioDaRodada) -> None:
@@ -625,6 +676,7 @@ def report(
         raise typer.Exit(code=1) from falha
 
     console.print(_tabela_das_trilhas(relatorio))
+    _avisar_sobre_infraestrutura(relatorio)
     _imprimir_delta(relatorio)
     _imprimir_linhas_de_base(relatorio)
     if relatorio.n_tarefas_com_errata:

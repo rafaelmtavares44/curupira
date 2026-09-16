@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import shutil
 from collections.abc import Iterator
@@ -10,10 +11,13 @@ from pathlib import Path
 import polars as pl
 import pytest
 import yaml
+from rich.console import Console
 from typer.testing import CliRunner
 
-from curupira.cli import app
+from curupira.cli import _avisar_sobre_infraestrutura, _pct, _tabela_das_trilhas, app
+from curupira.core.enums import Trilha
 from curupira.core.registry import limpar_registro
+from curupira.report.aggregate import MetricasDaTrilha, RelatorioDaRodada
 from tests.fabricas import par_strict
 
 runner = CliRunner()
@@ -629,3 +633,79 @@ def test_report_com_errata_conta_a_exclusao(dataset: Path, tmp_path: Path) -> No
     saida = _saida(resultado)
     assert "excluida(s) pela errata" in saida
     assert "Delta PT-BR nao calculado" in saida
+
+
+# --------------------------------------------------------------------------
+# A tela nao pode mentir onde o JSON ja diz a verdade (achado da Entrega 9)
+# --------------------------------------------------------------------------
+
+
+def test_pct_distingue_zero_de_ausencia_de_medicao() -> None:
+    """`0.0%` é uma nota; `—` é a falta dela.
+
+    Este teste é minúsculo e é o coração do achado da Entrega 9: enquanto as
+    duas coisas imprimiram igual, uma rodada 100% quebrada por chave inválida se
+    parecia, na tela, com um agente que errou tudo.
+    """
+    assert _pct(0.0) == "0.0%"
+    assert _pct(None) == "—"
+    assert _pct(1.0) == "100.0%"
+
+
+def _relatorio_quebrado(fracao: float) -> RelatorioDaRodada:
+    """Um relatório com a fração de erro de infraestrutura que se quer testar."""
+    return RelatorioDaRodada(
+        suite_id="v0.1",
+        agent_id="agente",
+        errata_revision=0,
+        n_tarefas_com_errata=0,
+        por_trilha={
+            "t2_formats": MetricasDaTrilha(
+                trilha=Trilha.T2_FORMATOS,
+                n_tarefas=2,
+                n_execucoes=4,
+                n_decididas=0,
+                acuracia=None,
+                taxa_de_falha_silenciosa=None,
+                taxa_de_falha_silenciosa_rotulada=0.0,
+                taxa_de_abstencao_indevida=None,
+                taxa_de_instabilidade=None,
+                latencia_p50_ms=0,
+                latencia_p95_ms=0,
+                fracao_pontuada_por_juiz=0.0,
+                fracao_com_erro_de_infraestrutura=fracao,
+            )
+        },
+    )
+
+
+def test_a_tabela_mostra_travessao_em_vez_de_zero_sem_medicao() -> None:
+    """A coluna de acurácia de uma trilha sem execução decidida sai vazia."""
+    tabela = _tabela_das_trilhas(_relatorio_quebrado(1.0))
+    console_de_teste = Console(file=io.StringIO(), width=200)
+    console_de_teste.print(tabela)
+    texto = console_de_teste.file.getvalue()  # type: ignore[attr-defined]
+
+    assert "erro infra" in texto
+    assert "100.0%" in texto
+    assert "—" in texto
+
+
+def test_o_aviso_de_infraestrutura_grita_acima_do_limiar(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Uma rodada comprometida tem de dizer que está comprometida.
+
+    Sem isto, o leitor recebe uma tabela de travessões e nenhuma explicação — e
+    a explicação é justamente a informação mais útil daquela rodada.
+    """
+    _avisar_sobre_infraestrutura(_relatorio_quebrado(1.0))
+    saida = capsys.readouterr()
+    assert "ATENCAO" in saida.err
+    assert "NAO e desempenho do agente" in saida.err
+
+
+def test_rodada_saudavel_nao_recebe_aviso(capsys: pytest.CaptureFixture[str]) -> None:
+    """O aviso tem de ser raro, senão vira ruído que ninguém lê."""
+    _avisar_sobre_infraestrutura(_relatorio_quebrado(0.0))
+    assert not capsys.readouterr().err

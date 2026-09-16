@@ -48,13 +48,31 @@ class MetricasDaTrilha(BaseModel):
     n_tarefas: int
     n_execucoes: int
     n_decididas: int
-    acuracia: float
-    taxa_de_falha_silenciosa: float
+
+    acuracia: float | None
+    """`None` quando NENHUMA execução foi decidida por camada objetiva.
+
+    ACHADO da Entrega 9, encontrado ensaiando com chave inválida de propósito.
+    Antes disto, uma rodada que falhou 100% por erro de infraestrutura — chave
+    errada, provedor fora do ar, rede caída — reportava `acuracia: 0.0` e a
+    tabela imprimia `0.0%`. Ou seja: **um número com cara de medição, produzido
+    a partir de zero observações.**
+
+    O leitor humano conclui que o agente errou tudo. O script que lê o
+    `report.json` conclui a mesma coisa, e pior, sem ninguém por perto.
+
+    Zero é uma nota. Ausência de medição não é nota nenhuma, e as duas coisas
+    não podem ter a mesma representação. É o mesmo princípio de
+    `Desfecho.PENDENTE_DE_JUIZ`: o agregador **não chuta**.
+    """
+
+    taxa_de_falha_silenciosa: float | None
     taxa_de_falha_silenciosa_rotulada: float
-    taxa_de_abstencao_indevida: float
-    taxa_de_instabilidade: float
+    taxa_de_abstencao_indevida: float | None
+
+    taxa_de_instabilidade: float | None
     """Fração de tarefas cujo resultado variou entre repetições. Um acerto que só
-    acontece às vezes não é competência."""
+    acontece às vezes não é competência. `None` sem execução decidida."""
 
     consistencia_de_grupo: float | None = None
     """Fração de grupos de variantes acertados integralmente. Quem entende
@@ -122,17 +140,17 @@ def _percentil_inteiro(valores: Sequence[int], fracao: float) -> int:
     return ordenados[indice]
 
 
-def _instabilidade(decididas: pl.DataFrame) -> float:
+def _instabilidade(decididas: pl.DataFrame) -> float | None:
     """Fração de tarefas cujo desfecho variou entre repetições.
 
     Args:
         decididas: só as linhas que entraram no denominador.
 
     Returns:
-        A fração, de 0 a 1.
+        A fração, de 0 a 1, ou `None` se nada foi decidido.
     """
     if decididas.is_empty():
-        return 0.0
+        return None
     por_tarefa = decididas.group_by("task_id").agg(pl.col("outcome").n_unique().alias("variou"))
     return float((por_tarefa["variou"] > 1).sum()) / por_tarefa.height
 
@@ -194,21 +212,33 @@ def _metricas(trilha: str, linhas: pl.DataFrame, tarefas: Sequence[Tarefa]) -> M
     sem_cache = decididas.filter(~pl.col("do_cache"))
     latencias = sem_cache["latency_ms"].to_list() if not sem_cache.is_empty() else []
 
-    def por_decididas(valor: int) -> float:
-        return valor / n_decididas if n_decididas else 0.0
+    def por_decididas(valor: int) -> float | None:
+        """Taxa sobre o denominador de decididas, ou `None` se ele for zero.
+
+        Devolver 0.0 aqui era o defeito: fabricava uma taxa a partir de nenhuma
+        observação. Ver a nota em `MetricasDaTrilha.acuracia`.
+        """
+        return valor / n_decididas if n_decididas else None
 
     acuracia = por_decididas(acertos)
     politica, piso = melhor_nota_trivial(tarefas) if tarefas else (None, None)
+
+    # Sem acuracia nao ha veredicto. Um `False` aqui afirmaria que o agente NAO
+    # bate a politica trivial, o que e uma afirmacao sobre competencia — e nao
+    # se afirma nada sobre competencia com zero observacoes. O agregador global
+    # ja descarta os `None`, entao o veredicto da rodada fica indeterminado
+    # sozinho, que e o certo.
+    bate = None if (piso is None or acuracia is None) else acuracia > piso
 
     return MetricasDaTrilha(
         trilha=Trilha(trilha),
         melhor_linha_de_base=str(politica) if politica else None,
         linha_de_base=piso,
-        bate_a_linha_de_base=None if piso is None else acuracia > piso,
+        bate_a_linha_de_base=bate,
         n_tarefas=linhas["task_id"].n_unique(),
         n_execucoes=linhas.height,
         n_decididas=n_decididas,
-        acuracia=por_decididas(acertos),
+        acuracia=acuracia,
         taxa_de_falha_silenciosa=por_decididas(silenciosas.height),
         taxa_de_falha_silenciosa_rotulada=(
             rotuladas.height / silenciosas.height if silenciosas.height else 0.0

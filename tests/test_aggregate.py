@@ -416,3 +416,98 @@ def test_bate_o_trivial_quando_acerta(tmp_path: Path) -> None:
     assert trilha.acuracia == 1.0
     assert trilha.bate_a_linha_de_base is True
     assert relatorio.nota_bate_a_linha_de_base is True
+
+
+# --------------------------------------------------------------------------
+# Denominador ZERO: o achado da Entrega 9
+# --------------------------------------------------------------------------
+#
+# Encontrado ensaiando a primeira rodada real com uma chave invalida de
+# proposito. A rodada falhou 100% por erro de infraestrutura, e o relatorio
+# respondeu com `acuracia: 0.0` e o veredicto "o agente NAO bate a politica
+# trivial" — duas afirmacoes sobre competencia produzidas a partir de ZERO
+# observacoes.
+#
+# Os 763 testes que existiam passaram sem notar. Nenhum deles zerava o
+# denominador inteiro; todos tinham ao menos uma execucao decidida. Este bloco
+# fecha esse buraco.
+
+
+def _so_erro_de_infraestrutura(tarefa: Tarefa, quantas: int = 3) -> list[ResultadoDeRodada]:
+    """Uma rodada em que nenhuma chamada foi respondida."""
+    return [
+        _resultado(
+            tarefa,
+            repetition=i,
+            outcome=Desfecho.ERRO_DE_EXECUCAO,
+            failure_class=ClasseDeFalha.NAO_APLICAVEL,
+        )
+        for i in range(quantas)
+    ]
+
+
+def test_sem_execucao_decidida_a_acuracia_e_none_e_nao_zero(tmp_path: Path) -> None:
+    """Zero é uma nota. Ausência de medição não é nota nenhuma.
+
+    As duas coisas não podem ter a mesma representação: `0.0` se lê como "o
+    agente errou tudo", e quem lê o `report.json` num script não tem como
+    distinguir.
+    """
+    pt, _ = _par()
+    relatorio = agregar(_gravar(_so_erro_de_infraestrutura(pt), tmp_path / "r"), [pt])
+    trilha = relatorio.por_trilha["t2_formats"]
+
+    assert trilha.n_execucoes == 3
+    assert trilha.n_decididas == 0
+    assert trilha.acuracia is None
+    assert trilha.taxa_de_falha_silenciosa is None
+    assert trilha.taxa_de_abstencao_indevida is None
+    assert trilha.taxa_de_instabilidade is None
+    assert trilha.fracao_com_erro_de_infraestrutura == 1.0
+
+
+def test_sem_acuracia_nao_ha_veredicto_sobre_a_linha_de_base(tmp_path: Path) -> None:
+    """Sem acurácia não há veredicto sobre a linha de base.
+
+    Um `False` aqui afirmaria que o agente NÃO bate o trivial. Não se afirma
+    isso com zero observações — nem contra, nem a favor.
+    """
+    pt, _ = _par()
+    relatorio = agregar(_gravar(_so_erro_de_infraestrutura(pt), tmp_path / "r"), [pt])
+
+    assert relatorio.por_trilha["t2_formats"].bate_a_linha_de_base is None
+    assert relatorio.nota_bate_a_linha_de_base is None
+
+
+def test_uma_execucao_decidida_ja_produz_veredicto(tmp_path: Path) -> None:
+    """A fronteira: com n=1 há medição, e a nota volta a ser número.
+
+    Sem este par, a correção poderia ter virado "nunca julgar", que é o erro
+    oposto e igualmente ruim.
+    """
+    pt, _ = _par()
+    resultados = [*_so_erro_de_infraestrutura(pt, 2), _resultado(pt, repetition=2)]
+    relatorio = agregar(_gravar(resultados, tmp_path / "r"), [pt])
+    trilha = relatorio.por_trilha["t2_formats"]
+
+    assert trilha.n_decididas == 1
+    assert trilha.acuracia == 1.0
+    assert trilha.bate_a_linha_de_base is not None
+
+
+def test_o_json_publicado_carrega_a_ausencia_como_null(tmp_path: Path) -> None:
+    """Quem consome o relatório por máquina precisa ver `null`, não `0.0`.
+
+    É o consumidor automático que corre mais risco: um humano estranha uma
+    tabela de zeros; um script publica a coluna no leaderboard.
+    """
+    pt, _ = _par()
+    destino = tmp_path / "report.json"
+    agregar(_gravar(_so_erro_de_infraestrutura(pt), tmp_path / "r"), [pt], saida=destino)
+
+    publicado = json.loads(destino.read_text(encoding="utf-8"))
+    trilha = publicado["por_trilha"]["t2_formats"]
+    assert trilha["acuracia"] is None
+    assert trilha["bate_a_linha_de_base"] is None
+    assert trilha["fracao_com_erro_de_infraestrutura"] == 1.0
+    assert publicado["nota_bate_a_linha_de_base"] is None
