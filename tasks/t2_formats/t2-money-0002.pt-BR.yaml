@@ -10,7 +10,7 @@
 # e tres e transfere 123 centavos.
 id: t2-money-0002
 schema_version: 1
-task_version: 1
+task_version: 2
 
 track: t2_formats
 locale: pt-BR
@@ -30,6 +30,14 @@ parity_notes: >-
   `valor_centavos`, `favorecido`), em portugues. Traduzi-los mudaria duas
   coisas ao mesmo tempo e o Delta deixaria de isolar a lingua natural. So a
   descricao da ferramenta e a mensagem do usuario mudam de idioma.
+  ASSIMETRIA DECLARADA (ADR 0005): as duas versoes NAO tem a mesma ambiguidade
+  intrinseca, e nao ha como terem. `1,234` em ingles e inequivoco — virgula e
+  separador de milhar. `1.234` em portugues e mil duzentos e trinta e quatro
+  para um brasileiro, mas o ponto e separador DECIMAL na convencao anglofona,
+  entao o texto brasileiro e genuinamente ambiguo para quem carrega as duas.
+  Isso NAO desqualifica o par como strict: a convencao numerica e parte do
+  objeto de estudo, nao ruido a controlar. Mas quem le o Delta precisa saber
+  que parte dele vem da notacao, e nao do idioma.
 generated_from: pt-BR
 
 variant_group: money-sep-01
@@ -83,6 +91,32 @@ expect:
           args:
             valor_centavos: 123400
             favorecido: "Silva"
+          arg_specs:
+            valor_centavos: {matcher: exact_int}
+            favorecido: {matcher: fuzzy_name, params: {threshold: 0.9}}
+          extra_args: reject
+
+    - id: favorecido_com_rotulo
+      rationale: >-
+        ACHADO DA PRIMEIRA RODADA REAL (16/09/2026), registrado na ADR 0005.
+        O agente que devolve "fornecedor Silva" em vez de "Silva" acertou a
+        tarefa: ele resolveu a armadilha do separador decimal, que e o unico
+        objeto deste teste. Levar junto o rotulo que o usuario usou e leitura
+        razoavel de quem e o favorecido, nao erro.
+        Antes desta alternativa existir, o `fuzzy_name` com threshold 0.9
+        reprovava essa resposta — e um modelo que acertou TODOS os valores em
+        centavos, nas tres repeticoes, saia do relatorio com Delta de -100%.
+        O Delta media o nosso limiar, nao o idioma.
+        `preference_rank: 1` porque "Silva" continua sendo a leitura mais
+        limpa; esta e aceitavel e um pouco pior, e o id que casou fica gravado
+        no resultado.
+      call_order: any
+      preference_rank: 1
+      calls:
+        - name: criar_transferencia
+          args:
+            valor_centavos: 123400
+            favorecido: "fornecedor Silva"
           arg_specs:
             valor_centavos: {matcher: exact_int}
             favorecido: {matcher: fuzzy_name, params: {threshold: 0.9}}

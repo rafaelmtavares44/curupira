@@ -7,18 +7,21 @@ decidem, o veredicto é `PENDENTE_DE_JUIZ` e a linha sai do denominador.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from curupira.core.enums import CamadaDePontuacao, Desfecho
 from curupira.core.expect import (
+    EsperaChamadaDeFerramenta,
     EsperaEsclarecimento,
     EsperaExtracao,
     EsperaNenhumaChamada,
     EsperaRecusa,
     EsperaSequencia,
 )
+from curupira.core.loader import carregar_diretorio
 from curupira.core.registry import limpar_registro
 from curupira.core.result import ChamadaObservada, RespostaCrua
 from curupira.core.task import Tarefa
@@ -427,3 +430,106 @@ def test_clarify_com_ferramenta_nao_exige_interrogacao() -> None:
         tool_calls=(ChamadaObservada(name="pedir_esclarecimento", args={"campo": "favorecido"}),)
     )
     assert pontuar_clarify(_clarify(), resposta).desfecho is Desfecho.PASSOU
+
+
+# --------------------------------------------------------------------------
+# Regressao da PRIMEIRA RODADA REAL (16/09/2026) — ver ADR 0005
+# --------------------------------------------------------------------------
+#
+# Estas nao sao chamadas inventadas: sao as respostas literais que os modelos
+# deram na primeira rodada paga do projeto, lidas do raw.jsonl. Guardar o caso
+# real como teste e o que impede a correcao de ser desfeita por alguem que
+# nunca viu o relatorio que a motivou.
+
+CAMINHO_DAS_TAREFAS = Path(__file__).resolve().parent.parent / "tasks" / "t2_formats"
+
+
+def _tarefa_do_disco(nome: str) -> Tarefa:
+    """Carrega uma tarefa REAL do dataset, nao uma fábrica.
+
+    Aqui isso importa: o que se testa é a correção feita no YAML publicado, não
+    uma reconstrução dele em Python.
+    """
+    return next(t for t in carregar_diretorio(CAMINHO_DAS_TAREFAS) if t.id == nome)
+
+
+@pytest.mark.parametrize(
+    ("tarefa", "favorecido", "centavos"),
+    [
+        ("t2-money-0001-en", "supplier Silva", 123456),
+        ("t2-money-0002-en", "supplier Silva", 123400),
+        ("t2-money-0001", "fornecedor Silva", 123456),
+        ("t2-money-0002", "fornecedor Silva", 123400),
+    ],
+)
+def test_favorecido_com_rotulo_passa(tarefa: str, favorecido: str, centavos: int) -> None:
+    """A resposta que o Sonnet 4.5 deu, e que o limiar 0.9 reprovava.
+
+    Ele acertou os seis valores em centavos e levou junto o rótulo que o usuário
+    usou. O resultado era Delta de -100% — medindo o nosso `threshold`, não o
+    idioma. Ver ADR 0005, D1.
+    """
+    resposta = RespostaCrua(
+        tool_calls=(
+            ChamadaObservada(
+                name="criar_transferencia",
+                args={"valor_centavos": centavos, "favorecido": favorecido},
+            ),
+        )
+    )
+    veredicto = pontuar(_tarefa_do_disco(tarefa), resposta)
+    assert veredicto.desfecho is Desfecho.PASSOU, veredicto
+
+
+@pytest.mark.parametrize("tarefa", ["t2-money-0001", "t2-money-0002"])
+def test_o_favorecido_sem_rotulo_continua_sendo_o_caminho_preferido(tarefa: str) -> None:
+    """A alternativa nova não pode virar a canônica.
+
+    `preference_rank` existe para registrar qual caminho o agente escolheu. Se
+    as duas alternativas empatassem, essa informação — que é produto, não log —
+    se perderia.
+    """
+    espera = _tarefa_do_disco(tarefa).expect
+    # A uniao e discriminada por `kind`: `accept` so existe no ramo tool_call.
+    # O assert torna a premissa explicita — se a tarefa mudar de tipo um dia, o
+    # teste falha dizendo o motivo, em vez de estourar num AttributeError.
+    assert isinstance(espera, EsperaChamadaDeFerramenta)
+    alternativas = {a.id: a.preference_rank for a in espera.accept}
+    assert alternativas["canonica"] == 0
+    assert alternativas["favorecido_com_rotulo"] == 1
+
+
+@pytest.mark.parametrize(
+    ("tarefa", "centavos"),
+    [("t2-money-0001", 123456000), ("t2-money-0002", 123)],
+)
+def test_o_valor_errado_continua_reprovando_com_qualquer_favorecido(
+    tarefa: str, centavos: int
+) -> None:
+    """O contrapeso: afrouxamos o nome, NÃO afrouxamos o valor.
+
+    `123456000` é ler o ponto como decimal; `123` é ler o separador de milhar
+    como decimal. São as armadilhas que a tarefa existe para pegar, e nenhuma
+    alternativa de `accept` pode deixá-las passar.
+    """
+    for favorecido in ("Silva", "fornecedor Silva"):
+        resposta = RespostaCrua(
+            tool_calls=(
+                ChamadaObservada(
+                    name="criar_transferencia",
+                    args={"valor_centavos": centavos, "favorecido": favorecido},
+                ),
+            )
+        )
+        veredicto = pontuar(_tarefa_do_disco(tarefa), resposta)
+        assert veredicto.desfecho is not Desfecho.PASSOU, (tarefa, favorecido)
+
+
+def test_as_tarefas_do_par_subiram_de_versao() -> None:
+    """Tarefa corrigida nunca muda em silêncio.
+
+    Se alguém editar o conteúdo e esquecer o `task_version`, um resultado antigo
+    passa a ser comparado com uma tarefa que não é mais a mesma.
+    """
+    for nome in ("t2-money-0001", "t2-money-0001-en", "t2-money-0002", "t2-money-0002-en"):
+        assert _tarefa_do_disco(nome).task_version == 2, nome
