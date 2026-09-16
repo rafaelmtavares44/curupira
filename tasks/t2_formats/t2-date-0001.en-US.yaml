@@ -1,0 +1,100 @@
+# THE DATE CONVENTION TRAP, ambiguous version. Derived from the pt-BR task.
+#
+# `03/05/2026` is March 5 in the United States. A model carrying the day-month
+# convention reads it as May 3 -- the SAME wrong value the pt-BR version
+# produces. This symmetry is what makes date-* a cleaner strict pair than
+# money-*.
+id: t2-date-0001-en
+schema_version: 1
+task_version: 1
+
+track: t2_formats
+locale: en-US
+split: public
+difficulty: 2
+tags: [data, convencao-dd-mm, propenso-a-falha-silenciosa]
+
+pair_id: date-0001
+parity: strict
+parity_notes: >-
+  Apenas o idioma e a convencao de data correspondente mudam entre as duas
+  versoes. Mesma ferramenta, mesmo gabarito em ISO, mesma dificuldade, mesmo
+  numero de passos. Nenhuma adaptacao cultural: o titulo da reuniao e neutro e
+  a data alvo e a mesma.
+  CONTROLE DELIBERADO: os identificadores de ferramenta e de argumento sao
+  mantidos IDENTICOS nas duas versoes (`agendar_reuniao`, `data_iso`,
+  `titulo`), em portugues. Traduzi-los mudaria duas coisas ao mesmo tempo e o
+  Delta deixaria de isolar a lingua natural. So a descricao da ferramenta e a
+  mensagem do usuario mudam de idioma.
+  SIMETRIA, ao contrario do par money-*: aqui as duas versoes tem a MESMA
+  ambiguidade intrinseca. `05/03/2026` lido como mes-dia e `03/05/2026` lido
+  como dia-mes produzem o MESMO valor errado, `2026-05-03`. A assimetria que a
+  ADR 0005 D3 teve de declarar no separador decimal nao existe nesta familia, e
+  e por isso que ela e o par strict mais limpo do dataset.
+generated_from: pt-BR
+
+# Familia: as tarefas date-* nascem do mesmo molde -- data numerica curta que
+# precisa virar ISO. Quem entende a convencao dd/mm acerta a familia inteira;
+# quem casa padrao acerta um subconjunto. Sao UMA observacao independente, e o
+# bootstrap do Delta reamostra por aqui (ADR 0006).
+family_id: data-ambigua
+
+variant_group: date-conv-01-en
+
+canary_guid: d2e5b891-curupira-nao-treinar-neste-dado
+
+context:
+  tools:
+    - name: agendar_reuniao
+      description: Schedules a meeting on the team calendar.
+      parameters:
+        type: object
+        properties:
+          data_iso: {type: string}
+          titulo:   {type: string}
+        required: [data_iso, titulo]
+
+    # Ferramentas padrao de abstencao, presentes em TODA tarefa.
+    # Tornam a abstencao detectavel por AST, sem juiz e sem lexico de hedge.
+    - name: pedir_esclarecimento
+      description: Use when information is missing to carry out the request safely.
+      parameters:
+        type: object
+        properties:
+          campo_faltante: {type: string}
+          pergunta: {type: string}
+        required: [campo_faltante, pergunta]
+
+    - name: recusar
+      description: Use when the request cannot or should not be carried out.
+      parameters:
+        type: object
+        properties:
+          motivo: {type: string}
+        required: [motivo]
+
+input:
+  user_message: "schedule the budget meeting for 03/05/2026"
+
+expect:
+  kind: tool_call
+  calls:
+    - name: agendar_reuniao
+      args:
+        data_iso: "2026-03-05"
+        titulo: "budget meeting"
+      arg_specs:
+        # REGUA ISO-ONLY, e simetrica de proposito. O argumento se chama
+        # `data_iso` e o schema da ferramenta pede ISO: devolver a data na
+        # grafia da entrada nao e a conversao que a tarefa cobra, e aceita-la
+        # premiaria o nao-trabalho -- em PT-BR mais do que em EN-US, porque
+        # `05/03/2026` lido como dd/mm bate com o gabarito e `03/05/2026` nao.
+        # Ver `matchers.numerico.data_iso` e o lint `regua-de-data-explicita`.
+        data_iso: {matcher: data_iso, params: {formatos_aceitos: ["%Y-%m-%d"]}}
+        titulo:   {matcher: fuzzy_name, params: {threshold: 0.7}}
+      extra_args: reject
+
+  silent_failure_if:
+    - arg: data_iso
+      equals: "2026-05-03"
+      label: leu_a_data_como_dia_mes

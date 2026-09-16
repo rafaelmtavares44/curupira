@@ -115,21 +115,66 @@ def test_tolerancia_numerica() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_data_dd_mm_e_lida_como_brasileira_por_padrao() -> None:
-    """`03/04/2026` é 3 de abril em português, 4 de março em inglês."""
-    assert data_iso("03/04/2026", "2026-04-03", VAZIO)
-    assert not data_iso("03/04/2026", "2026-03-04", VAZIO)
+BR: Mapping[str, JsonValue] = {"formatos_aceitos": ["%d/%m/%Y"]}
+EUA: Mapping[str, JsonValue] = {"formatos_aceitos": ["%m/%d/%Y"]}
 
 
 def test_formato_de_data_vem_da_tarefa() -> None:
-    """O matcher não adivinha idioma: a régua é declarada na tarefa."""
-    params: Mapping[str, JsonValue] = {"formatos_aceitos": ["%m/%d/%Y"]}
-    assert data_iso("03/04/2026", "2026-03-04", params)
+    """`03/04/2026` é 3 de abril em português, 4 de março em inglês.
+
+    O matcher não adivinha idioma: a régua é declarada na tarefa, e a mesma
+    grafia dá resultados opostos conforme a régua declarada.
+    """
+    assert data_iso("03/04/2026", "2026-04-03", BR)
+    assert not data_iso("03/04/2026", "2026-03-04", BR)
+    assert data_iso("03/04/2026", "2026-03-04", EUA)
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        VAZIO,
+        {"formatos_aceitos": []},
+        {"formatos_aceitos": "%d/%m/%Y"},
+        {"formatos_aceitos": [7, None]},
+    ],
+)
+def test_data_sem_regua_declarada_estoura(params: Mapping[str, JsonValue]) -> None:
+    """Sem `formatos_aceitos` não há default — havia, e era um viés de locale.
+
+    O default antigo começava por `%d/%m/%Y`, *"porque o dataset nasce em
+    PT-BR"*. O efeito é que devolver a entrada **sem converter** acertava na
+    versão PT-BR e errava na EN-US: pontos de Delta que o Curupira criava
+    sozinho, com `arg_specs` idênticos nos dois lados do par.
+
+    Falhar alto é a rede. O portão é o lint `regua-de-data-explicita`.
+    """
+    with pytest.raises(ValueError, match="formatos_aceitos"):
+        data_iso("03/04/2026", "2026-04-03", params)
+
+
+def test_a_mensagem_do_estouro_explica_o_motivo() -> None:
+    """Um erro que só recusa ensina a contornar; este diz por que não há default."""
+    with pytest.raises(ValueError, match="vies de locale"):
+        data_iso("03/04/2026", "2026-04-03", VAZIO)
+
+
+def test_a_regua_vale_para_o_observado_e_o_gabarito_pode_ser_iso() -> None:
+    """ISO é aceito no gabarito sem ser aceito no que o agente mandou.
+
+    A assimetria é deliberada e vale registrar num teste, porque é fácil de
+    desfazer por engano: o gabarito é nosso e escrevemos em ISO por convenção;
+    o valor observado é do agente e só vale pela régua que a tarefa declarou.
+    Aceitar ISO no observado "por conveniência" afrouxaria toda tarefa de data
+    de um lado só — o lado de quem escreve o gabarito.
+    """
+    assert data_iso("03/04/2026", "2026-04-03", BR)
+    assert not data_iso("2026-04-03", "2026-04-03", EUA)
 
 
 def test_data_recusa_lixo() -> None:
-    assert not data_iso("trinta de abril", "2026-04-30", VAZIO)
-    assert not data_iso(20260430, "2026-04-30", VAZIO)
+    assert not data_iso("trinta de abril", "2026-04-30", BR)
+    assert not data_iso(20260430, "2026-04-30", BR)
 
 
 # --------------------------------------------------------------------------

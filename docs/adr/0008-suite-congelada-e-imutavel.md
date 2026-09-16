@@ -118,19 +118,26 @@ mesmo jeito.
 
 ## O que esta ADR não resolve
 
-**A errata ainda é escrita à mão.** Não há `curupira errata add` que monte a
-entrada, confira que o `test_ref` existe e recalcule se a suíte morreu. Enquanto
-não houver, o caminho certo tem mais atrito que o errado — e atrito é
-exatamente o que produziu os três recongelamentos. **Isto é a maior dívida que
-esta ADR deixa aberta**, e provavelmente a próxima coisa a fazer.
+~~**A errata ainda é escrita à mão.**~~ **PAGO na Entrega 15.** `curupira errata
+add` monta a entrada, confere o `test_ref` e recalcula se a suíte morreu;
+`errata show` lista o que já entrou. O caminho certo deixou de ter mais atrito
+que o errado, que era a causa dos três recongelamentos.
 
-**O `test_ref` não é verificado.** A errata exige o caminho de um teste que
-reproduz o defeito, e nada confere que ele existe ou que falha na tarefa velha.
-Um campo de texto livre chamado `test_ref` é promessa, não garantia.
+~~**O `test_ref` não é verificado.**~~ **PAGO EM PARTE na Entrega 15.**
+`core/referencia.py` confere, por AST, que o arquivo existe e que define uma
+função com aquele nome. **Continua em aberto** que o teste *falhe* na tarefa
+defeituosa: isso exigiria executar o pytest, e o `curupira` é o pacote de
+runtime. Qualquer teste verde com o nome certo passa.
 
 **Nada impede uma suíte nova de nascer errada.** Este portão protege o que já foi
 congelado. A qualidade da v0.2 depende do lint do dataset e da revisão humana,
 como sempre dependeu.
+
+> **Atualização de 2026-09-16 (ADR 0009):** a revisão humana já falhou nesse
+> papel uma vez. Quatro tarefas novas, revisadas linha a linha, carregavam um
+> viés de locale que estava no default de um matcher e não no YAML. A frase
+> acima envelheceu mal em duas semanas, e a lição é a mesma da nota de método:
+> o que segura é lint, não leitura.
 
 ## Nota de método
 

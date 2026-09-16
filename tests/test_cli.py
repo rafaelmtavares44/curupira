@@ -27,7 +27,8 @@ from curupira.cli import (
     _tabela_das_trilhas,
     app,
 )
-from curupira.core.enums import Trilha
+from curupira.core.enums import Paridade, Trilha
+from curupira.core.loader import carregar_diretorio
 from curupira.core.registry import limpar_registro
 from curupira.report.aggregate import MetricasDaTrilha, RelatorioDaRodada
 from tests.fabricas import par_strict, tarefa_bruta
@@ -518,15 +519,29 @@ def test_run_recusa_diretorio_de_tarefas_inexistente(tmp_path: Path, dataset: Pa
 
 
 def test_dataset_real_congela(raiz_do_repo: Path, tmp_path: Path) -> None:
-    """Ensaio do congelamento da v0.1, sem tocar no repositório."""
+    """Ensaio do congelamento do dataset real, sem tocar no repositório.
+
+    O número esperado é **derivado do dataset**, não escrito à mão. A versão
+    anterior cravava `"2 pares strict"` e reprovou no dia em que a família
+    `data-ambigua` entrou — um teste que quebra porque o dataset cresceu não
+    mede nada, só cobra pedágio, e ensina a editar o teste por reflexo. O que
+    vale conferir é que a contagem impressa pela CLI é a mesma que sai dos
+    arquivos.
+    """
     copia = tmp_path / "tasks"
     shutil.copytree(raiz_do_repo / "tasks", copia)
+
+    tarefas = list(carregar_diretorio(copia))
+    strict = {t.pair_id for t in tarefas if t.parity is Paridade.STRICT and t.pair_id}
+    assert strict, "o dataset real precisa ter ao menos um par strict"
+
     resultado = runner.invoke(
         app,
         ["suite", "freeze", "ensaio", "--tarefas", str(copia), "--destino", str(tmp_path / "s")],
     )
+
     assert resultado.exit_code == 0, resultado.output
-    assert "2 pares strict" in _saida(resultado)
+    assert f"{len(strict)} pares strict" in _saida(resultado)
 
 
 # --------------------------------------------------------------------------

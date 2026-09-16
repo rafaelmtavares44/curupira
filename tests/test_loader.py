@@ -179,6 +179,93 @@ def test_par_com_a_mesma_mensagem_nos_dois_idiomas() -> None:
     assert "par-idiomas-diferentes" in _regras(lint_do_dataset(_tarefas(pt, en)))
 
 
+# --------------------------------------------------------------------------
+# A régua
+# --------------------------------------------------------------------------
+
+
+def _specs(bruto: dict[str, Any]) -> dict[str, Any]:
+    """Atalho para os `arg_specs` da primeira chamada da primeira alternativa."""
+    specs = bruto["expect"]["accept"][0]["calls"][0]["arg_specs"]
+    assert isinstance(specs, dict)
+    return specs
+
+
+def test_data_iso_sem_formatos_aceitos_e_erro() -> None:
+    """Um default de data é um viés de locale escondido num valor omitido.
+
+    O defeito que motivou esta regra era invisível na revisão: as duas versões
+    do par tinham `arg_specs` **idênticos**, e mesmo assim a régua favorecia o
+    português, porque o default do matcher começava por `%d/%m/%Y`. Devolver a
+    entrada sem converter acertava em PT-BR e errava em EN-US.
+    """
+    bruto = tarefa_bruta()
+    _specs(bruto)["valor_centavos"] = {"matcher": "data_iso"}
+    assert "regua-de-data-explicita" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_data_iso_com_formatos_aceitos_passa() -> None:
+    bruto = tarefa_bruta()
+    _specs(bruto)["valor_centavos"] = {
+        "matcher": "data_iso",
+        "params": {"formatos_aceitos": ["%Y-%m-%d"]},
+    }
+    assert "regua-de-data-explicita" not in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_lista_de_formatos_vazia_nao_conta_como_declarada() -> None:
+    """Declarar `[]` é a forma mais fácil de calar o lint sem resolver nada."""
+    bruto = tarefa_bruta()
+    _specs(bruto)["valor_centavos"] = {"matcher": "data_iso", "params": {"formatos_aceitos": []}}
+    assert "regua-de-data-explicita" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_par_strict_com_reguas_diferentes() -> None:
+    """Se a régua muda junto com o idioma, o Delta mede as réguas, não o idioma.
+
+    A agravante é o incentivo: quem escreve a tarefa escolhe as duas réguas, e o
+    número sai na direção que convém a quem publica. Por isso é erro, não aviso.
+    """
+    pt, en = par_strict()
+    _specs(en)["favorecido"] = {"matcher": "fuzzy_name", "params": {"threshold": 0.5}}
+    problemas = lint_do_dataset(_tarefas(pt, en))
+    assert "par-mesma-regua" in _regras(problemas)
+    assert any("favorecido" in p.mensagem for p in problemas if p.regra == "par-mesma-regua")
+
+
+def test_par_strict_com_matcher_diferente() -> None:
+    pt, en = par_strict()
+    _specs(en)["valor_centavos"] = {"matcher": "tolerancia_numerica", "params": {"abs_tol": 1000}}
+    assert "par-mesma-regua" in _regras(lint_do_dataset(_tarefas(pt, en)))
+
+
+def test_par_strict_com_campo_medido_so_de_um_lado() -> None:
+    """Medir um argumento a menos em um dos lados também é régua diferente."""
+    pt, en = par_strict()
+    del _specs(en)["favorecido"]
+    assert "par-mesma-regua" in _regras(lint_do_dataset(_tarefas(pt, en)))
+
+
+def test_par_strict_com_a_mesma_regua_passa() -> None:
+    """A fábrica produz um par legítimo: a regra não pode acusar o caso bom."""
+    pt, en = par_strict()
+    assert "par-mesma-regua" not in _regras(lint_do_dataset(_tarefas(pt, en)))
+
+
+def test_ordem_das_chaves_dos_params_nao_muda_a_regua() -> None:
+    """A comparação é canônica: YAML escrito em outra ordem é a mesma régua."""
+    pt, en = par_strict()
+    _specs(pt)["favorecido"] = {
+        "matcher": "fuzzy_name",
+        "params": {"threshold": 0.9, "ignorar_acentos": True},
+    }
+    _specs(en)["favorecido"] = {
+        "matcher": "fuzzy_name",
+        "params": {"ignorar_acentos": True, "threshold": 0.9},
+    }
+    assert "par-mesma-regua" not in _regras(lint_do_dataset(_tarefas(pt, en)))
+
+
 def test_par_bem_traduzido_passa() -> None:
     pt, en = par_strict()
     assert "par-idiomas-diferentes" not in _regras(lint_do_dataset(_tarefas(pt, en)))

@@ -32,6 +32,7 @@ from curupira.core.hashing import hash_da_tarefa
 from curupira.core.registry import nomes_registrados
 from curupira.core.suite import Suite
 from curupira.core.task import Tarefa
+from curupira.matchers.numerico import CHAVE_DOS_FORMATOS
 
 ID_DA_FORMA_CURTA = "canonica"
 """Id da alternativa que a forma curta do YAML gera."""
@@ -49,6 +50,12 @@ MINIMO_DE_MEMBROS_DO_GRUPO = 2
 
 FERRAMENTAS_DE_ABSTENCAO = frozenset({"pedir_esclarecimento", "recusar"})
 """Tornam a abstencao detectavel por AST, sem juiz e sem lexico de hedge."""
+
+MATCHER_DE_DATA = "data_iso"
+"""O unico matcher cuja regua depende de convencao de locale."""
+
+PARTES_DE_UM_PAR = 2
+"""pt-BR e en-US. Um par com um lado so ja e pego por `par-completo`."""
 
 
 class Severidade(StrEnum):
@@ -301,6 +308,7 @@ def _lint_um_par(pair_id: str, membros: Sequence[Tarefa]) -> list[ProblemaDeLint
                 "exatamente a direcao que favorece quem publica o numero",
             )
         )
+    problemas.extend(_lint_regua_do_par(pair_id, membros))
     return problemas
 
 
@@ -357,6 +365,81 @@ def _lint_registro(tarefas: Sequence[Tarefa]) -> list[ProblemaDeLint]:
                     )
                 )
     return problemas
+
+
+def _regua(spec: EspecificacaoDeArgumento) -> str:
+    """Serializa um `arg_specs` em texto comparável entre as versões de um par.
+
+    Args:
+        spec: a especificação declarada no YAML.
+
+    Returns:
+        Uma string canônica: mesmo matcher e mesmos parâmetros dão o mesmo
+        texto, independentemente da ordem em que o YAML escreveu as chaves.
+    """
+    itens = ", ".join(f"{k}={spec.params[k]!r}" for k in sorted(spec.params))
+    return f"{spec.matcher}({itens})"
+
+
+def _lint_regua_de_data(tarefas: Sequence[Tarefa]) -> list[ProblemaDeLint]:
+    """`data_iso` sem `formatos_aceitos` é um viés de locale por omissão.
+
+    Este lint existe porque o defeito era invisível na revisão: as duas versões
+    do par tinham `arg_specs` **idênticos** e mesmo assim a régua favorecia o
+    português, porque o default do matcher era brasileiro. Ver `data_iso`.
+    """
+    problemas: list[ProblemaDeLint] = []
+    for tarefa in tarefas:
+        for campo, spec in _specs_da_tarefa(tarefa):
+            if spec.matcher != MATCHER_DE_DATA:
+                continue
+            bruto = spec.params.get(CHAVE_DOS_FORMATOS)
+            if not isinstance(bruto, list) or not any(isinstance(f, str) for f in bruto):
+                problemas.append(
+                    _erro(
+                        "regua-de-data-explicita",
+                        tarefa.id,
+                        f"o campo '{campo}' usa {MATCHER_DE_DATA} sem "
+                        f"'{CHAVE_DOS_FORMATOS}'. Nao ha default: um default de "
+                        "data e um vies de locale escondido, e ele entra direto "
+                        "no Delta PT-BR. Declare os formatos strptime aceitos, os "
+                        "MESMOS nas duas versoes do par",
+                    )
+                )
+    return problemas
+
+
+def _lint_regua_do_par(pair_id: str, membros: Sequence[Tarefa]) -> list[ProblemaDeLint]:
+    """Num par strict, a régua tem de ser a mesma dos dois lados.
+
+    Se a régua muda junto com o idioma, o Delta deixa de medir o idioma e passa
+    a medir a diferença entre as duas réguas — com a agravante de que quem
+    escreve a tarefa é quem escolhe as duas, e o número sai na direção que
+    convém a quem publica.
+    """
+    por_locale: defaultdict[Locale, dict[str, str]] = defaultdict(dict)
+    for tarefa in membros:
+        for campo, spec in _specs_da_tarefa(tarefa):
+            por_locale[tarefa.locale][campo] = _regua(spec)
+
+    reguas = list(por_locale.values())
+    if len(reguas) < PARTES_DE_UM_PAR or reguas[0] == reguas[1]:
+        return []
+
+    divergentes = sorted(
+        campo
+        for campo in set(reguas[0]) | set(reguas[1])
+        if reguas[0].get(campo) != reguas[1].get(campo)
+    )
+    return [
+        _erro(
+            "par-mesma-regua",
+            membros[0].id,
+            f"as duas versoes do par '{pair_id}' medem {divergentes} com regua "
+            "diferente; o Delta passaria a medir a diferenca entre as reguas, "
+            "nao entre os idiomas",
+        )
+    ]
 
 
 def _lint_ferramentas(tarefas: Sequence[Tarefa]) -> list[ProblemaDeLint]:
@@ -529,6 +612,7 @@ _REGRAS = (
     _lint_variantes,
     _lint_familias,
     _lint_split,
+    _lint_regua_de_data,
 )
 
 
