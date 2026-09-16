@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 import io
 import json
+import pkgutil
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -14,7 +16,16 @@ import yaml
 from rich.console import Console
 from typer.testing import CliRunner
 
-from curupira.cli import _avisar_sobre_infraestrutura, _pct, _tabela_das_trilhas, app
+import curupira.adapters
+from curupira.cli import (
+    VARIAVEL_DA_CHAVE,
+    Provedor,
+    _adaptador,
+    _avisar_sobre_infraestrutura,
+    _pct,
+    _tabela_das_trilhas,
+    app,
+)
 from curupira.core.enums import Trilha
 from curupira.core.registry import limpar_registro
 from curupira.report.aggregate import MetricasDaTrilha, RelatorioDaRodada
@@ -709,3 +720,117 @@ def test_rodada_saudavel_nao_recebe_aviso(capsys: pytest.CaptureFixture[str]) ->
     """O aviso tem de ser raro, senão vira ruído que ninguém lê."""
     _avisar_sobre_infraestrutura(_relatorio_quebrado(0.0))
     assert not capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------
+# Nenhum adaptador fica órfão
+# --------------------------------------------------------------------------
+
+ADAPTADORES_FORA_DO_CLI = {
+    "AdaptadorGoogle": (
+        "ADR 0004: o Gemini tem duas APIs vigentes (generateContent e "
+        "Interactions) e a escolha entre elas ainda nao foi feita. Os dois "
+        "metodos sao stubs que estouram NotImplementedError; expo-los na linha "
+        "de comando entregaria uma opcao que quebra."
+    ),
+}
+"""Adaptadores implementados que **de propósito** não aparecem no `--provedor`.
+
+Estar aqui exige um motivo escrito. É a diferença entre uma decisão e um
+esquecimento — e foi um esquecimento que deixou o adaptador da OpenAI testado,
+coberto e inalcançável entre as Entregas 8 e 12.
+"""
+
+
+def _adaptadores_implementados() -> dict[str, type]:
+    """Descobre toda classe de adaptador do pacote.
+
+    Returns:
+        Mapa de nome da classe para a classe, varrendo `curupira.adapters`.
+    """
+    encontrados: dict[str, type] = {}
+    for info in pkgutil.iter_modules(curupira.adapters.__path__):
+        modulo = importlib.import_module(f"curupira.adapters.{info.name}")
+        for nome, objeto in vars(modulo).items():
+            if not nome.startswith("Adaptador") or not isinstance(objeto, type):
+                continue
+            if getattr(objeto, "__module__", None) != modulo.__name__:
+                continue
+            # `_is_protocol` e como o proprio `typing` marca um Protocol. O
+            # contrato `AdaptadorDeModelo` nao e uma implementacao e nao tem o
+            # que ser alcancado pelo `--provedor`.
+            if getattr(objeto, "_is_protocol", False):
+                continue
+            encontrados[nome] = objeto
+    return encontrados
+
+
+def _adaptadores_alcancaveis() -> set[str]:
+    """Nomes das classes que o `--provedor` consegue instanciar.
+
+    Returns:
+        Os nomes de classe, um por valor do enum.
+    """
+    return {type(_adaptador(p)).__name__ for p in Provedor}
+
+
+def test_nenhum_adaptador_fica_inalcancavel_pela_linha_de_comando() -> None:
+    """Adaptador que o `--provedor` não alcança é código que não faz nada.
+
+    Este teste nasce de um defeito real: o `AdaptadorOpenAI` foi escrito na
+    Entrega 8, com ADR, testes e cobertura — e ficou fora do enum `Provedor`.
+    Passou por ruff, mypy, bandit, 820 testes e cinco rodadas de CI sem que nada
+    apontasse, porque **nenhum teste ligava as duas pontas**. Só apareceu quando
+    alguém perguntou como se usa o sistema.
+
+    Sair da linha de comando continua sendo permitido. O que não é permitido é
+    sair sem dizer por quê.
+    """
+    implementados = set(_adaptadores_implementados())
+    alcancaveis = _adaptadores_alcancaveis()
+    declarados_fora = set(ADAPTADORES_FORA_DO_CLI)
+
+    orfaos = implementados - alcancaveis - declarados_fora
+    assert not orfaos, (
+        f"adaptadores implementados e inalcancaveis pelo --provedor: {sorted(orfaos)}. "
+        "Acrescente ao enum Provedor e a _adaptador, ou declare em "
+        "ADAPTADORES_FORA_DO_CLI com o motivo."
+    )
+
+
+def test_a_lista_de_excecoes_nao_guarda_adaptador_que_ja_entrou() -> None:
+    """A exceção tem de morrer quando deixa de ser exceção.
+
+    Sem isto, `ADAPTADORES_FORA_DO_CLI` viraria um cemitério: nomes de
+    adaptadores que já foram plugados continuariam listados como "de propósito
+    fora", e a lista deixaria de significar alguma coisa.
+    """
+    ja_entraram = set(ADAPTADORES_FORA_DO_CLI) & _adaptadores_alcancaveis()
+    assert not ja_entraram, (
+        f"{sorted(ja_entraram)} esta no --provedor E na lista de excecoes. Remova da lista."
+    )
+
+
+def test_a_lista_de_excecoes_nao_guarda_adaptador_que_nao_existe() -> None:
+    """Adaptador apagado não pode deixar uma justificativa órfã para trás."""
+    fantasmas = set(ADAPTADORES_FORA_DO_CLI) - set(_adaptadores_implementados())
+    assert not fantasmas, f"{sorted(fantasmas)} nao existe mais; remova da lista de excecoes"
+
+
+def test_todo_provedor_com_rede_declara_de_onde_sai_a_chave() -> None:
+    """Provedor que chama API e não declara variável usaria chave vazia.
+
+    O sintoma seria um 401 em toda a rodada — barato, mas confuso. O `falso` é a
+    exceção legítima: não tem rede e não tem chave.
+    """
+    sem_chave = {p.value for p in Provedor} - set(VARIAVEL_DA_CHAVE) - {Provedor.FALSO.value}
+    assert not sem_chave, f"{sorted(sem_chave)} chamam API e nao tem variavel em VARIAVEL_DA_CHAVE"
+
+
+def test_a_chave_de_cada_provedor_tem_o_prefixo_do_projeto() -> None:
+    """`CURUPIRA_` de propósito: não reaproveitamos a chave da sessão do dev.
+
+    Quem roda o benchmark declara, num gesto explícito, qual chave vai ser gasta.
+    """
+    for provedor, variavel in sorted(VARIAVEL_DA_CHAVE.items()):
+        assert variavel.startswith("CURUPIRA_"), f"{provedor}: {variavel}"

@@ -25,6 +25,7 @@ from curupira import __version__
 from curupira.adapters.anthropic import AdaptadorAnthropic
 from curupira.adapters.base import AdaptadorDeModelo, ParametrosDeAmostragem
 from curupira.adapters.falso import AdaptadorFalso, Politica
+from curupira.adapters.openai import AdaptadorOpenAI
 from curupira.core.enums import ClasseDeFalha, Desfecho
 from curupira.core.io import gravar_texto
 from curupira.core.loader import (
@@ -105,7 +106,10 @@ dilui: ele REMOVE execucoes do denominador, e as que remove nao sao sorteadas �
 tendem a ser as mais lentas, as mais longas, as que estouraram limite. Uma
 rodada com 10% de erro ja esta medindo um subconjunto enviesado."""
 
-VARIAVEL_DA_CHAVE: Final = {"anthropic": "CURUPIRA_ANTHROPIC_API_KEY"}
+VARIAVEL_DA_CHAVE: Final = {
+    "anthropic": "CURUPIRA_ANTHROPIC_API_KEY",
+    "openai": "CURUPIRA_OPENAI_API_KEY",
+}
 """De onde sai a chave de cada provedor.
 
 Prefixo `CURUPIRA_` de proposito: nao reaproveitamos `ANTHROPIC_API_KEY`, que
@@ -115,9 +119,17 @@ benchmark declara, num gesto explicito, qual chave vai ser gasta.
 
 
 class Provedor(StrEnum):
-    """Provedores que o `run` sabe instanciar."""
+    """Provedores que o `run` sabe instanciar.
+
+    Todo adaptador implementado precisa aparecer aqui ou estar declarado em
+    `tests/test_cli.py::ADAPTADORES_FORA_DO_CLI`, com o motivo. Um adaptador
+    testado, coberto e inalcançável pela linha de comando é código que passou
+    por todos os portões sem fazer nada — foi o que aconteceu com o da OpenAI
+    entre as Entregas 8 e 12.
+    """
 
     ANTHROPIC = "anthropic"
+    OPENAI = "openai"
     FALSO = "falso"
     """Deterministico, sem rede e sem custo. Ensaio e linha de base trivial."""
 
@@ -133,6 +145,8 @@ def _adaptador(provedor: Provedor) -> AdaptadorDeModelo:
     """
     if provedor is Provedor.ANTHROPIC:
         return AdaptadorAnthropic()
+    if provedor is Provedor.OPENAI:
+        return AdaptadorOpenAI()
     return AdaptadorFalso(Politica.PRIMEIRA_FERRAMENTA)
 
 
