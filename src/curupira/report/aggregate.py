@@ -29,6 +29,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict
 
 from curupira.core.enums import CamadaDePontuacao, ClasseDeFalha, Desfecho, Locale, Paridade, Trilha
+from curupira.core.io import gravar_texto
 from curupira.core.suite import Errata
 from curupira.core.task import Tarefa
 from curupira.report.baselines import PoliticaTrivial, melhor_nota_trivial, todas_as_notas
@@ -382,6 +383,5 @@ def agregar(
         nota_bate_a_linha_de_base=bate,
     )
     if saida is not None:
-        saida.parent.mkdir(parents=True, exist_ok=True)
-        saida.write_text(relatorio.model_dump_json(indent=2), encoding="utf-8")
+        gravar_texto(saida, relatorio.model_dump_json(indent=2))
     return relatorio

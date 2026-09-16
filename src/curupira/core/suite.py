@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from curupira import __version__
 from curupira.core.enums import Locale, Paridade
 from curupira.core.hashing import hash_da_tarefa
+from curupira.core.io import gravar_texto
 from curupira.core.task import Tarefa
 
 _CFG = ConfigDict(extra="forbid", frozen=True)
@@ -152,10 +153,9 @@ def gravar_suite(suite: Suite, caminho: Path) -> None:
         suite: a suíte congelada.
         caminho: o arquivo de destino.
     """
-    caminho.parent.mkdir(parents=True, exist_ok=True)
-    caminho.write_text(
+    gravar_texto(
+        caminho,
         yaml.safe_dump(suite.model_dump(mode="json"), sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
     )
 
 

@@ -47,6 +47,7 @@ from curupira.adapters.base import (
     ParametrosDeAmostragem,
 )
 from curupira.core.hashing import hash_da_tarefa
+from curupira.core.io import acrescentar_linhas
 from curupira.core.result import ExecucaoCrua, IdentidadeDoAgente, RespostaCrua
 from curupira.core.suite import Suite, verificar_suite
 from curupira.core.task import Tarefa
@@ -283,13 +284,13 @@ async def _escrever(fila: asyncio.Queue[ExecucaoCrua | None], destino: Path) -> 
         fila: a fila alimentada pelas corrotinas de execução.
         destino: o arquivo de saída.
     """
-    with destino.open("a", encoding="utf-8") as saida:
+    with acrescentar_linhas(destino) as saida:
         while True:
             item = await fila.get()
             if item is None:
                 return
-            saida.write(item.model_dump_json() + "\n")
-            saida.flush()
+            saida.escrever_linha(item.model_dump_json())
+            saida.descarregar()
 
 
 def _recusas_previas(suite: Suite, tarefas: Mapping[str, Tarefa]) -> list[str]:

@@ -26,6 +26,7 @@ from curupira.adapters.anthropic import AdaptadorAnthropic
 from curupira.adapters.base import AdaptadorDeModelo, ParametrosDeAmostragem
 from curupira.adapters.falso import AdaptadorFalso, Politica
 from curupira.core.enums import ClasseDeFalha, Desfecho
+from curupira.core.io import gravar_texto
 from curupira.core.loader import (
     ProblemaDeLint,
     Severidade,
@@ -422,7 +423,7 @@ def run(
         erros=sum(1 for execucao in execucoes if execucao.erro is not None),
         acertos_de_cache=sum(1 for execucao in execucoes if execucao.do_cache),
     )
-    (diretorio / ARQUIVO_DA_RODADA).write_text(registro.model_dump_json(indent=2), encoding="utf-8")
+    gravar_texto(diretorio / ARQUIVO_DA_RODADA, registro.model_dump_json(indent=2))
 
     console.print(
         f"rodada em {diretorio}\n"

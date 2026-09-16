@@ -26,6 +26,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from curupira.core.io import gravar_texto
 from curupira.core.result import RespostaCrua
 
 _log = logging.getLogger(__name__)
@@ -140,7 +141,6 @@ def gravar(diretorio: Path, chave: str, resposta: RespostaCrua) -> None:
             não tem onde guardar um.
     """
     caminho = caminho_da_entrada(diretorio, chave)
-    caminho.parent.mkdir(parents=True, exist_ok=True)
     temporario = caminho.with_name(f"{caminho.name}.{os.getpid()}.tmp")
-    temporario.write_text(resposta.model_dump_json(), encoding="utf-8")
+    gravar_texto(temporario, resposta.model_dump_json())
     temporario.replace(caminho)
