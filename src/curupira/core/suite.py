@@ -38,6 +38,18 @@ _CFG = ConfigDict(extra="forbid", frozen=True)
 TETO_DE_ERRATA = 0.05
 """Fração máxima de tarefas com errata antes de a suíte ser declarada morta."""
 
+MINIMO_DE_ERRATAS_TOLERADAS = 2
+"""Piso absoluto, para que o teto não estrangule suíte pequena.
+
+Cinco por cento de quatro tarefas é 0,2: **uma** errata mataria a suíte v0.1.
+Isso transformaria o mecanismo desenhado para evitar recongelamento na razão
+para recongelar — exatamente o que aconteceu três vezes entre as Entregas 9 e 11.
+
+Acima de quarenta tarefas o piso deixa de valer e o teto relativo volta a
+mandar: 5% de sessenta são três, e três gabaritos errados num piloto de sessenta
+é motivo legítimo para encerrar a suíte em vez de remendá-la.
+"""
+
 
 class EntradaDeSuite(BaseModel):
     """Uma tarefa congelada numa suíte."""
@@ -81,6 +93,16 @@ class EntradaDeErrata(BaseModel):
 
     test_ref: str
     """Caminho do teste que reproduz o defeito. Sem teste, não entra."""
+
+    replaced_by: str | None = None
+    """Id da tarefa que corrige esta, quando existir.
+
+    Corrigir uma tarefa congelada **cria uma tarefa nova**, e este campo liga as
+    duas. Sem ele, a história do defeito se perde: o leitor vê uma tarefa
+    excluída e não sabe se ela foi consertada ou abandonada. As duas ficam na
+    mesma `family_id`, então o bootstrap continua tratando-as como uma
+    observação só — que é o que elas são.
+    """
 
 
 class Errata(BaseModel):
@@ -183,6 +205,27 @@ def carregar_errata(caminho: Path) -> Errata:
     return Errata.model_validate(yaml.safe_load(caminho.read_text(encoding="utf-8")))
 
 
+SUFIXO_DA_ERRATA = ".errata.yaml"
+
+
+def carregar_suites(destino: Path) -> list[Suite]:
+    """Carrega todas as suítes congeladas de um diretório.
+
+    Args:
+        destino: o diretório das suítes.
+
+    Returns:
+        As suítes, ordenadas por id. Vazio quando o diretório não existe — um
+        dataset ainda sem suíte nenhuma é estado legítimo, não erro.
+    """
+    if not destino.is_dir():
+        return []
+    arquivos = sorted(
+        caminho for caminho in destino.glob("*.yaml") if not caminho.name.endswith(SUFIXO_DA_ERRATA)
+    )
+    return sorted((carregar_suite(caminho) for caminho in arquivos), key=lambda s: s.id)
+
+
 def verificar_suite(suite: Suite, tarefas: Mapping[str, Tarefa]) -> list[str]:
     """Confere o dataset atual contra os hashes congelados na suíte.
 
@@ -232,4 +275,6 @@ def suite_esta_morta(suite: Suite, errata: Errata) -> bool:
     afetadas = {entrada.task_id for entrada in errata.entries}
     # `Suite.entries` tem min_length=1, entao nao ha divisao por zero a defender.
     congeladas = {entrada.task_id for entrada in suite.entries}
-    return len(afetadas & congeladas) / len(congeladas) > TETO_DE_ERRATA
+    quantas = len(afetadas & congeladas)
+    tolerado = max(TETO_DE_ERRATA * len(congeladas), MINIMO_DE_ERRATAS_TOLERADAS)
+    return quantas > tolerado

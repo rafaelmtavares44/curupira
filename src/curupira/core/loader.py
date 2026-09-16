@@ -28,7 +28,9 @@ from curupira.core.expect import (
     EsperaRecusa,
     EsperaSequencia,
 )
+from curupira.core.hashing import hash_da_tarefa
 from curupira.core.registry import nomes_registrados
+from curupira.core.suite import Suite
 from curupira.core.task import Tarefa
 
 ID_DA_FORMA_CURTA = "canonica"
@@ -530,12 +532,78 @@ _REGRAS = (
 )
 
 
-def lint_do_dataset(tarefas: Sequence[Tarefa], *, estrito: bool = False) -> list[ProblemaDeLint]:
+def lint_do_congelamento(
+    tarefas: Sequence[Tarefa], suites: Sequence[Suite]
+) -> list[ProblemaDeLint]:
+    """Tarefa que já entrou numa suíte congelada é **imutável**.
+
+    Esta é a regra que a ADR 0008 fecha, e ela existe porque a alternativa foi
+    testada e falhou: entre as Entregas 9 e 11 a suíte v0.1 foi recongelada
+    **três vezes**, e cada recongelamento foi justificável sozinho. A frequência
+    é que era o sinal.
+
+    O caminho certo, quando uma tarefa congelada está errada, é o que o
+    `core.suite` já descrevia desde a Parte B: **a suíte não muda um byte**. A
+    tarefa defeituosa entra na errata, sai do agregado, e a correção nasce como
+    **tarefa nova, com id novo**, na mesma família — que vai para a próxima
+    suíte.
+
+    Antes do primeiro congelamento a tarefa é rascunho e `task_version` sobe à
+    vontade. Depois, este lint fecha a porta.
+
+    Args:
+        tarefas: as tarefas carregadas agora.
+        suites: as suítes congeladas encontradas no repositório.
+
+    Returns:
+        Um erro por tarefa congelada que mudou ou sumiu.
+    """
+    problemas: list[ProblemaDeLint] = []
+    atual = {tarefa.id: tarefa for tarefa in tarefas}
+
+    for suite in suites:
+        for entrada in suite.entries:
+            tarefa = atual.get(entrada.task_id)
+            if tarefa is None:
+                problemas.append(
+                    _erro(
+                        "congelada-sumiu",
+                        entrada.task_id,
+                        f"esta congelada na suite '{suite.id}' e nao existe mais no "
+                        "dataset. Suite congelada precisa continuar rodavel: se a "
+                        "tarefa tinha defeito, ela fica e entra na errata",
+                    )
+                )
+                continue
+            if hash_da_tarefa(tarefa) == entrada.sha256:
+                continue
+            problemas.append(
+                _erro(
+                    "congelada-mudou",
+                    entrada.task_id,
+                    f"esta congelada na suite '{suite.id}' e o conteudo mudou. Tarefa "
+                    "congelada e imutavel: reverta a edicao, ponha esta tarefa na "
+                    "errata com o teste que reproduz o defeito, e crie a correcao "
+                    "como tarefa NOVA, com id novo, na mesma family_id",
+                )
+            )
+    return problemas
+
+
+def lint_do_dataset(
+    tarefas: Sequence[Tarefa],
+    *,
+    estrito: bool = False,
+    suites: Sequence[Suite] = (),
+) -> list[ProblemaDeLint]:
     """Verifica as invariantes do dataset que o schema sozinho não pega.
 
     Args:
         tarefas: as tarefas carregadas.
         estrito: se verdadeiro, avisos são promovidos a erro.
+        suites: as suítes congeladas, para cobrar a imutabilidade do que já foi
+            congelado. Vazio checa só o dataset — útil para lintar um conjunto
+            solto de tarefas, e é o que os testes de outras regras fazem.
 
     Returns:
         Lista de problemas, ordenada por severidade e depois por regra. Vazia
@@ -544,6 +612,7 @@ def lint_do_dataset(tarefas: Sequence[Tarefa], *, estrito: bool = False) -> list
     problemas: list[ProblemaDeLint] = []
     for regra in _REGRAS:
         problemas.extend(regra(tarefas))
+    problemas.extend(lint_do_congelamento(tarefas, suites))
 
     if estrito:
         problemas = [p.model_copy(update={"severidade": Severidade.ERRO}) for p in problemas]

@@ -6,14 +6,17 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
 
 from curupira.core.hashing import hash_da_tarefa
 from curupira.core.suite import (
+    MINIMO_DE_ERRATAS_TOLERADAS,
     TETO_DE_ERRATA,
     EntradaDeErrata,
     Errata,
     carregar_errata,
     carregar_suite,
+    carregar_suites,
     congelar,
     gravar_suite,
     suite_esta_morta,
@@ -125,11 +128,32 @@ def test_errata_vazia_nao_mata_a_suite() -> None:
     assert not suite_esta_morta(suite, Errata(suite_id="v0.1", revision=0))
 
 
-def test_errata_acima_do_teto_mata_a_suite() -> None:
-    """Sem o teto, errata vira edição silenciosa com outro nome."""
+def test_o_piso_protege_a_suite_pequena() -> None:
+    """Cinco por cento de duas tarefas é 0,1: sem piso, UMA errata mataria.
+
+    Era esse o efeito perverso que a ADR 0008 corrige. O mecanismo desenhado
+    para evitar recongelamento virava, numa suíte pequena, a razão para
+    recongelar — e foi exatamente o que aconteceu três vezes entre as Entregas
+    9 e 11.
+    """
     tarefas = _tarefas()
     suite = congelar(tarefas, suite_id="v0.1")
-    assert suite_esta_morta(suite, _errata(tarefas[0].id))
+
+    assert not suite_esta_morta(suite, _errata(tarefas[0].id))
+    assert not suite_esta_morta(suite, _errata(*[t.id for t in tarefas]))
+
+
+def test_acima_do_piso_a_suite_pequena_morre() -> None:
+    """O piso é folga, não licença: a terceira errata mata mesmo assim."""
+    brutos = [
+        tarefa_bruta(task_id=f"p{i:03d}", canary=f"p{i:03d}-curupira-nao-treinar", valor=i)
+        for i in range(10)
+    ]
+    suite = congelar([Tarefa.model_validate(b) for b in brutos], suite_id="v0.1")
+
+    assert MINIMO_DE_ERRATAS_TOLERADAS == 2
+    assert not suite_esta_morta(suite, _errata("p000", "p001"))
+    assert suite_esta_morta(suite, _errata("p000", "p001", "p002"))
 
 
 def test_errata_dentro_do_teto_nao_mata() -> None:
@@ -142,6 +166,89 @@ def test_errata_dentro_do_teto_nao_mata() -> None:
     assert pytest.approx(0.05) == TETO_DE_ERRATA
     assert not suite_esta_morta(suite, _errata("t000", "t001", "t002", "t003", "t004"))
     assert suite_esta_morta(suite, _errata(*[f"t{i:03d}" for i in range(6)]))
+
+
+def test_acima_de_quarenta_tarefas_o_teto_relativo_volta_a_mandar() -> None:
+    """O piso só existe para suíte pequena; ele nunca afrouxa uma grande.
+
+    Cinco por cento de sessenta são três, que já é maior que o piso de dois.
+    Num piloto desse tamanho, três gabaritos errados é motivo legítimo para
+    encerrar a suíte em vez de remendá-la.
+    """
+    brutos = [
+        tarefa_bruta(task_id=f"g{i:03d}", canary=f"g{i:03d}-curupira-nao-treinar", valor=i)
+        for i in range(60)
+    ]
+    suite = congelar([Tarefa.model_validate(b) for b in brutos], suite_id="v0.1")
+
+    assert not suite_esta_morta(suite, _errata("g000", "g001", "g002"))
+    assert suite_esta_morta(suite, _errata("g000", "g001", "g002", "g003"))
+
+
+def test_a_errata_aponta_a_tarefa_que_substitui() -> None:
+    """Sem isso, o leitor vê tarefa excluída e não sabe se foi consertada.
+
+    Corrigir uma tarefa congelada cria uma tarefa NOVA; `replaced_by` liga as
+    duas, e a `family_id` compartilhada mantém o bootstrap tratando-as como uma
+    observação só — que é o que elas são.
+    """
+    entrada = EntradaDeErrata(
+        task_id="t2-money-0002",
+        task_version=3,
+        date=date(2026, 9, 16),
+        defect="gabarito ambiguo entre reais e centavos",
+        test_ref="tests/test_pontuador.py::test_repro",
+        replaced_by="t2-money-0004",
+    )
+    assert entrada.replaced_by == "t2-money-0004"
+
+
+def test_replaced_by_e_opcional() -> None:
+    """Uma tarefa pode ser abandonada sem substituta, e isso também é resposta."""
+    entrada = EntradaDeErrata(
+        task_id="t2-money-0002",
+        task_version=3,
+        date=date(2026, 9, 16),
+        defect="a armadilha nao existe: os dois valores sao aceitaveis",
+        test_ref="tests/test_pontuador.py::test_repro",
+    )
+    assert entrada.replaced_by is None
+
+
+# --------------------------------------------------------------------------
+# carregar_suites
+# --------------------------------------------------------------------------
+
+
+def test_carregar_suites_ignora_os_arquivos_de_errata(tmp_path: Path) -> None:
+    """Errata mora no mesmo diretório e tem outro schema.
+
+    Ler uma errata como se fosse suíte estouraria validação — e o `validate`
+    passaria a falhar por um arquivo legítimo.
+    """
+    gravar_suite(congelar(_tarefas(), suite_id="v0.1"), tmp_path / "v0.1.yaml")
+    (tmp_path / "v0.1.errata.yaml").write_text(
+        yaml.safe_dump(_errata("fab-0001-pt").model_dump(mode="json")), encoding="utf-8"
+    )
+
+    carregadas = carregar_suites(tmp_path)
+
+    assert [s.id for s in carregadas] == ["v0.1"]
+
+
+def test_carregar_suites_de_diretorio_inexistente_devolve_vazio(tmp_path: Path) -> None:
+    """Dataset ainda sem suíte nenhuma é estado legítimo, não erro."""
+    assert carregar_suites(tmp_path / "nao-existe") == []
+
+
+def test_carregar_suites_ordena_por_id(tmp_path: Path) -> None:
+    """Ordem estável importa: o lint reporta na mesma sequência a cada execução."""
+    for identificador in ("v0.2", "v0.1"):
+        gravar_suite(
+            congelar(_tarefas(), suite_id=identificador), tmp_path / f"{identificador}.yaml"
+        )
+
+    assert [s.id for s in carregar_suites(tmp_path)] == ["v0.1", "v0.2"]
 
 
 def test_errata_round_trip(tmp_path: Path) -> None:

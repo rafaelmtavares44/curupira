@@ -12,6 +12,7 @@ import sys
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from time import perf_counter
 from typing import Annotated, Final
 
 import httpx
@@ -41,6 +42,7 @@ from curupira.core.suite import (
     Suite,
     carregar_errata,
     carregar_suite,
+    carregar_suites,
     congelar,
     gravar_suite,
     suite_esta_morta,
@@ -49,6 +51,13 @@ from curupira.core.suite import (
 from curupira.core.task import Tarefa
 from curupira.formatos import registrar_validadores
 from curupira.matchers import registrar_todos
+from curupira.mcp.protocolo import VERSAO_DO_PROTOCOLO
+from curupira.mcp.rodada import (
+    execucao_da_sessao,
+    identidade_declarada,
+)
+from curupira.mcp.rodada import gravar as gravar_bruto
+from curupira.mcp.servidor import ServidorDeTarefa
 from curupira.report.aggregate import RelatorioDaRodada, agregar
 from curupira.report.delta import METODO_BCA
 from curupira.runner.executor import (
@@ -240,8 +249,14 @@ def _imprimir(problemas: list[ProblemaDeLint]) -> None:
 def validate(
     tarefas: Annotated[Path, typer.Option(help="Raiz do dataset.")] = Path("tasks"),
     estrito: Annotated[bool, typer.Option("--strict", help="Avisos viram erros.")] = False,
+    destino: Annotated[Path, typer.Option(help="Diretorio das suites.")] = Path("suites"),
 ) -> None:
-    """Faz o lint do dataset: canarios unicos, paridade, matchers registrados."""
+    """Faz o lint do dataset: canarios unicos, paridade, matchers registrados.
+
+    Confere tambem a IMUTABILIDADE do que ja foi congelado: uma tarefa que esta
+    numa suite de `suites/` nao pode mudar nem sumir. Este e o portao que a
+    ADR 0008 cria, e ele roda no CI.
+    """
     _preparar_registro()
     if not tarefas.is_dir():
         erro_console.print(f"diretorio nao encontrado: {tarefas}", style="red")
@@ -252,7 +267,8 @@ def validate(
         console.print(f"nenhuma tarefa em {tarefas}", style="yellow")
         return
 
-    problemas = lint_do_dataset(carregadas, estrito=estrito)
+    congeladas = carregar_suites(destino)
+    problemas = lint_do_dataset(carregadas, estrito=estrito, suites=congeladas)
     _imprimir(problemas)
 
     erros = sum(1 for p in problemas if p.severidade is Severidade.ERRO)
@@ -288,7 +304,7 @@ def suite_freeze(
         raise typer.Exit(code=CODIGO_DE_USO)
 
     carregadas = list(carregar_diretorio(tarefas))
-    problemas = lint_do_dataset(carregadas, estrito=False)
+    problemas = lint_do_dataset(carregadas, estrito=False, suites=carregar_suites(destino))
     if tem_erro(problemas):
         _imprimir(problemas)
         erro_console.print(
@@ -701,6 +717,86 @@ def report(
             style="yellow",
         )
     console.print(f"\nrelatorio em {rodada / ARQUIVO_DE_RELATORIO}", style="green")
+
+
+@app.command()
+def serve(
+    suite: Annotated[str, typer.Option(help="Id da suite congelada, ex.: v0.1.")],
+    tarefa: Annotated[str, typer.Option(help="Id da tarefa a servir.")],
+    agent: Annotated[str, typer.Option(help="Id do agente a pontuar.")],
+    modelo: Annotated[str, typer.Option(help="Modelo que o agente usa, COM data.")],
+    framework: Annotated[str | None, typer.Option(help="Framework do agente.")] = None,
+    temperatura: Annotated[float, typer.Option(help="Temperatura configurada no agente.")] = 0.0,
+    prompt_template: Annotated[str, typer.Option(help="Id do prompt do agente.")] = "externo",
+    repeticao: Annotated[int, typer.Option(help="Indice desta repeticao.")] = 0,
+    tarefas: Annotated[Path, typer.Option(help="Raiz do dataset.")] = Path("tasks"),
+    destino: Annotated[Path, typer.Option(help="Diretorio das suites.")] = Path("suites"),
+    saida: Annotated[Path, typer.Option(help="Diretorio da rodada.")] = Path("runs/mcp"),
+) -> None:
+    """Serve UMA tarefa por MCP e grava as chamadas que o agente fizer.
+
+    Inverte a direcao do `run`: em vez de o Curupira chamar o modelo, o AGENTE
+    chama o Curupira. Qualquer framework que fale MCP entra por aqui, e nenhum
+    adaptador novo e necessario.
+
+    O transporte e stdio: uma linha JSON por mensagem. A sessao termina quando o
+    stdin fecha, e so entao o `raw.jsonl` e gravado.
+
+    ATENCAO: o stdout pertence ao protocolo. Toda mensagem para humano sai no
+    stderr, porque uma linha nossa no meio do fio corromperia a conversa.
+
+    Os campos `modelo`, `framework`, `temperatura` e `prompt_template` sao
+    AUTO-DECLARADOS: um servidor MCP nao consegue observar nenhum deles. E por
+    isso que o leaderboard separa auto-reportado de verificado.
+    """
+    _preparar_registro()
+    congelada, _ = _suite_do_disco(destino, suite)
+    dataset = _dataset(tarefas)
+
+    if tarefa not in {entrada.task_id for entrada in congelada.entries}:
+        erro_console.print(f"a tarefa '{tarefa}' nao esta na suite '{suite}'", style="red")
+        raise typer.Exit(code=CODIGO_DE_USO)
+    escolhida = dataset.get(tarefa)
+    if escolhida is None:
+        erro_console.print(f"tarefa nao encontrada no dataset: {tarefa}", style="red")
+        raise typer.Exit(code=CODIGO_DE_USO)
+
+    servidor = ServidorDeTarefa(escolhida)
+    erro_console.print(
+        f"servindo '{tarefa}' por MCP {VERSAO_DO_PROTOCOLO} no stdio; "
+        f"{len(escolhida.context.tools)} ferramentas. Feche o stdin para encerrar.",
+        style="green",
+    )
+
+    comeco = perf_counter()
+    for resposta in servidor.servir(sys.stdin):
+        sys.stdout.write(resposta + "\n")
+        sys.stdout.flush()
+    decorrido = int((perf_counter() - comeco) * 1000)
+
+    bruto = saida / NOME_DO_BRUTO
+    gravar_bruto(
+        bruto,
+        execucao_da_sessao(
+            escolhida,
+            servidor.chamadas,
+            suite_id=suite,
+            agente=identidade_declarada(
+                agent,
+                modelo,
+                framework=framework,
+                temperatura=temperatura,
+                prompt_template_id=prompt_template,
+            ),
+            repeticao=repeticao,
+            latencia_ms=decorrido,
+        ),
+    )
+    erro_console.print(
+        f"{len(servidor.chamadas)} chamada(s) observada(s) · bruto em {bruto}\n"
+        f"  proximo passo: curupira score {saida}",
+        style="green",
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover

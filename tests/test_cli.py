@@ -29,7 +29,7 @@ from curupira.cli import (
 from curupira.core.enums import Trilha
 from curupira.core.registry import limpar_registro
 from curupira.report.aggregate import MetricasDaTrilha, RelatorioDaRodada
-from tests.fabricas import par_strict
+from tests.fabricas import par_strict, tarefa_bruta
 
 runner = CliRunner()
 
@@ -55,6 +55,23 @@ def dataset(tmp_path: Path) -> Path:
     raiz = tmp_path / "tasks"
     raiz.mkdir()
     for bruto in par_strict():
+        (raiz / f"{bruto['id']}.yaml").write_text(
+            yaml.safe_dump(bruto, allow_unicode=True), encoding="utf-8"
+        )
+    return raiz
+
+
+@pytest.fixture
+def dataset_grande(tmp_path: Path) -> Path:
+    """Dez tarefas soltas, para o teto da errata sair do piso absoluto."""
+    raiz = tmp_path / "tasks-grande"
+    raiz.mkdir()
+    for indice in range(10):
+        bruto = tarefa_bruta(
+            task_id=f"g{indice:03d}",
+            canary=f"g{indice:03d}-curupira-nao-treinar",
+            valor=indice + 1,
+        )
         (raiz / f"{bruto['id']}.yaml").write_text(
             yaml.safe_dump(bruto, allow_unicode=True), encoding="utf-8"
         )
@@ -161,13 +178,13 @@ def test_verify_com_suite_inexistente(dataset: Path, tmp_path: Path) -> None:
     assert resultado.exit_code == 2
 
 
-def test_verify_declara_suite_morta_por_errata(dataset: Path, tmp_path: Path) -> None:
-    """Passando de 5% de errata, a suíte se encerra em vez de ser remendada."""
-    suites = tmp_path / "suites"
-    comum = ["--tarefas", str(dataset), "--destino", str(suites)]
-    assert runner.invoke(app, ["suite", "freeze", "v0.1", *comum]).exit_code == 0
+def _gravar_errata(suites: Path, *ids: str) -> None:
+    """Escreve uma errata com uma entrada por id.
 
-    alvo = next(dataset.glob("*-pt.yaml")).stem
+    Args:
+        suites: o diretório das suítes.
+        ids: as tarefas defeituosas.
+    """
     (suites / "v0.1.errata.yaml").write_text(
         yaml.safe_dump(
             {
@@ -181,14 +198,44 @@ def test_verify_declara_suite_morta_por_errata(dataset: Path, tmp_path: Path) ->
                         "defect": "gabarito ambiguo",
                         "test_ref": "tests/test_errata.py::test_repro",
                     }
+                    for alvo in ids
                 ],
             }
         ),
         encoding="utf-8",
     )
 
+
+def test_uma_errata_nao_mata_uma_suite_pequena(dataset: Path, tmp_path: Path) -> None:
+    """O comportamento que a ADR 0008 corrige.
+
+    Antes do piso absoluto, 5% de duas tarefas era 0,1 — e a primeira errata
+    matava a suíte. O mecanismo desenhado para evitar recongelamento virava a
+    razão para recongelar.
+    """
+    suites = tmp_path / "suites"
+    comum = ["--tarefas", str(dataset), "--destino", str(suites)]
+    assert runner.invoke(app, ["suite", "freeze", "v0.1", *comum]).exit_code == 0
+
+    _gravar_errata(suites, next(dataset.glob("*-pt.yaml")).stem)
+
+    assert runner.invoke(app, ["suite", "verify", "v0.1", *comum]).exit_code == 0
+
+
+def test_verify_declara_suite_morta_acima_do_tolerado(dataset_grande: Path, tmp_path: Path) -> None:
+    """Passando do tolerado, a suíte se encerra em vez de ser remendada.
+
+    Sem esse limite, errata vira edição silenciosa com outro nome.
+    """
+    suites = tmp_path / "suites"
+    comum = ["--tarefas", str(dataset_grande), "--destino", str(suites)]
+    assert runner.invoke(app, ["suite", "freeze", "v0.1", *comum]).exit_code == 0
+
+    _gravar_errata(suites, "g000", "g001", "g002")
+
     resultado = runner.invoke(app, ["suite", "verify", "v0.1", *comum])
     assert resultado.exit_code == 1
+    assert "morta" in _saida(resultado)
 
 
 def test_o_pipeline_inteiro_esta_na_ajuda() -> None:

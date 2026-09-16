@@ -21,6 +21,7 @@ from curupira.core.loader import (
     tem_erro,
 )
 from curupira.core.registry import limpar_registro
+from curupira.core.suite import Suite, congelar
 from curupira.core.task import Tarefa
 from curupira.formatos import registrar_validadores
 from curupira.matchers import registrar_todos
@@ -434,3 +435,86 @@ def test_refusal_com_ferramenta_proibida_inexistente() -> None:
         "injection_label": "exfiltracao-via-documento",
     }
     assert "ferramenta-existe" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+# --------------------------------------------------------------------------
+# Imutabilidade do que já foi congelado (ADR 0008)
+# --------------------------------------------------------------------------
+
+
+def _congelada(tarefas: list[Tarefa]) -> Suite:
+    """Congela as tarefas numa suíte, para o lint ter o que cobrar."""
+    return congelar(tarefas, suite_id="v0.1")
+
+
+def test_tarefa_congelada_que_muda_e_erro() -> None:
+    """O portão que a ADR 0008 cria, e que faltava nas Entregas 9 a 11.
+
+    Sem ele, editar tarefa congelada só é descoberto pelo `suite verify`, que é
+    opcional — e o caminho de menor resistência vira recongelar. Aconteceu três
+    vezes em duas sessões.
+    """
+    originais = _tarefas(*par_strict())
+    suite = _congelada(originais)
+
+    alteradas = _tarefas(*par_strict(valor=999))
+    problemas = lint_do_dataset(alteradas, suites=[suite])
+
+    assert "congelada-mudou" in _regras(problemas)
+    assert all(p.severidade is Severidade.ERRO for p in problemas if p.regra == "congelada-mudou")
+
+
+def test_a_mensagem_ensina_o_caminho_certo() -> None:
+    """Portão que só recusa ensina a contornar; este ensina a corrigir.
+
+    Quem lê a falha precisa sair sabendo que o conserto é errata mais tarefa
+    nova — senão a saída óbvia continua sendo recongelar.
+    """
+    suite = _congelada(_tarefas(*par_strict()))
+    problemas = lint_do_dataset(_tarefas(*par_strict(valor=999)), suites=[suite])
+
+    # As DUAS versoes do par mudaram, entao sao dois problemas: o lint reporta
+    # por tarefa, nao por par.
+    mudaram = [p for p in problemas if p.regra == "congelada-mudou"]
+    assert len(mudaram) == 2
+    for problema in mudaram:
+        assert "errata" in problema.mensagem
+        assert "id novo" in problema.mensagem
+        assert "family_id" in problema.mensagem
+
+
+def test_tarefa_congelada_que_some_e_erro() -> None:
+    """Suíte congelada precisa continuar rodável; apagar tarefa a quebra."""
+    suite = _congelada(_tarefas(*par_strict()))
+    problemas = lint_do_dataset([], suites=[suite])
+
+    assert "congelada-sumiu" in _regras(problemas)
+
+
+def test_tarefa_congelada_intacta_nao_gera_problema() -> None:
+    """A regra tem de ser silenciosa no caso normal, senão vira ruído."""
+    tarefas = _tarefas(*par_strict())
+    problemas = lint_do_dataset(tarefas, suites=[_congelada(tarefas)])
+
+    assert "congelada-mudou" not in _regras(problemas)
+    assert "congelada-sumiu" not in _regras(problemas)
+
+
+def test_tarefa_fora_de_suite_pode_mudar_a_vontade() -> None:
+    """Antes do primeiro congelamento a tarefa é rascunho.
+
+    `task_version` existe exatamente para esse período. Depois do congelamento
+    ele para de subir, porque a tarefa para de mudar.
+    """
+    suite = _congelada(_tarefas(*par_strict("congelado-0001")))
+    rascunho = _tarefas(*par_strict("rascunho-0002", valor=42))
+
+    problemas = lint_do_dataset(rascunho, suites=[suite])
+
+    assert "congelada-mudou" not in _regras(problemas)
+
+
+def test_sem_suite_nenhuma_o_lint_nao_cobra_congelamento() -> None:
+    """Dataset novo, antes de qualquer congelamento, é estado legítimo."""
+    problemas = lint_do_dataset(_tarefas(*par_strict()))
+    assert "congelada-mudou" not in _regras(problemas)
