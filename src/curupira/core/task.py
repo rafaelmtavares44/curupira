@@ -109,6 +109,29 @@ class Tarefa(BaseModel):
     mesmo locale ou com gabaritos idênticos.
     """
 
+    family_id: str | None = None
+    """Molde de origem. É a unidade de reamostragem do bootstrap do Delta.
+
+    Duas tarefas da mesma família não são observações independentes: quem
+    entende o molde acerta as duas, quem não entende erra as duas. Tratá-las
+    como independentes estreita o intervalo de confiança sem que nada avise —
+    o erro que mais engana, porque produz um número mais bonito.
+
+    **Escopado por PAR, não por locale.** As duas versões de um `pair_id`
+    carregam a mesma família, e o lint recusa divergência. Aqui está a diferença
+    para `variant_group`, que é escopado por locale: a unidade do Delta é o par,
+    que atravessa os dois idiomas.
+
+    Relação com `variant_group`: todo grupo de variantes está contido numa
+    família — se duas tarefas são variantes próximas, elas vieram do mesmo
+    molde. A recíproca é falsa: uma família pode reunir tarefas com o mesmo
+    gabarito (várias de detecção de irrelevância, por exemplo), que o lint de
+    `variant_group` recusaria. O lint cobra a contenção.
+
+    `None` significa "família de um membro só". É aceito com aviso enquanto o
+    dataset é piloto, e vira erro quando o piloto for autorado — ver ADR 0006.
+    """
+
     canary_guid: str
     """GUID único, estilo BIG-bench. Pedido de exclusão do treino e detector de
     contaminação: se um modelo souber reproduzi-lo, o dataset vazou."""

@@ -449,6 +449,75 @@ def _lint_split(tarefas: Sequence[Tarefa]) -> list[ProblemaDeLint]:
     ]
 
 
+def _lint_familias(tarefas: Sequence[Tarefa]) -> list[ProblemaDeLint]:
+    """A família é a unidade de reamostragem do Delta, e precisa ser coerente.
+
+    Três invariantes, nas severidades que a ADR 0006 fixa:
+
+    1. **Erro** — as duas versões de um `pair_id` declaram famílias diferentes.
+       O par é a unidade do Delta; se as versões discordam, não existe "a
+       família do par" e o bootstrap não tem o que reamostrar.
+    2. **Erro** — membros de um mesmo `variant_group` declaram famílias
+       diferentes. Variantes próximas vieram do mesmo molde por definição;
+       espalhá-las por famílias distintas as devolve ao bootstrap como
+       observações independentes, que é justamente o que a família existe para
+       impedir.
+    3. **Aviso** — tarefa `parity: strict` sem `family_id`. Ela entra no Delta
+       como família de um membro só, o que pode estar certo e pode ser
+       esquecimento. Vira erro quando o piloto for autorado.
+    """
+    problemas: list[ProblemaDeLint] = []
+
+    por_par: defaultdict[str, set[str | None]] = defaultdict(set)
+    por_grupo: defaultdict[str, set[str | None]] = defaultdict(set)
+    primeiro_do_par: dict[str, str] = {}
+    primeiro_do_grupo: dict[str, str] = {}
+
+    for tarefa in tarefas:
+        if tarefa.pair_id is not None:
+            por_par[tarefa.pair_id].add(tarefa.family_id)
+            primeiro_do_par.setdefault(tarefa.pair_id, tarefa.id)
+        if tarefa.variant_group is not None:
+            por_grupo[tarefa.variant_group].add(tarefa.family_id)
+            primeiro_do_grupo.setdefault(tarefa.variant_group, tarefa.id)
+        if tarefa.parity is Paridade.STRICT and tarefa.family_id is None:
+            problemas.append(
+                _aviso(
+                    "familia-declarada",
+                    tarefa.id,
+                    "tarefa strict sem family_id: entra no Delta como familia de "
+                    "um membro so. Se e mesmo unica, declare a familia; se veio "
+                    "de um molde, o bootstrap vai contar independencia que nao ha",
+                )
+            )
+
+    for par, familias in sorted(por_par.items()):
+        if len(familias) > 1:
+            problemas.append(
+                _erro(
+                    "familia-do-par",
+                    primeiro_do_par[par],
+                    f"o par '{par}' declara familias diferentes "
+                    f"({sorted(f or '-' for f in familias)}); o par e a unidade do "
+                    "Delta e so pode ter uma familia",
+                )
+            )
+
+    for grupo, familias in sorted(por_grupo.items()):
+        if len(familias) > 1:
+            problemas.append(
+                _erro(
+                    "familia-do-grupo",
+                    primeiro_do_grupo[grupo],
+                    f"o grupo de variantes '{grupo}' se espalha pelas familias "
+                    f"{sorted(f or '-' for f in familias)}; variantes proximas vieram do "
+                    "mesmo molde e pertencem a mesma familia",
+                )
+            )
+
+    return problemas
+
+
 _REGRAS = (
     _lint_unicidade,
     _lint_proveniencia,
@@ -456,6 +525,7 @@ _REGRAS = (
     _lint_registro,
     _lint_ferramentas,
     _lint_variantes,
+    _lint_familias,
     _lint_split,
 )
 

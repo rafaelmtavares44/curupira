@@ -270,7 +270,7 @@ def test_a_tarefa_pontuada_por_juiz_nunca_entra_no_delta() -> None:
             _resultado(pt, scoring_layer=CamadaDePontuacao.JUIZ),
         ]
     )
-    vetor_en, vetor_pt, motivo = vetores_do_delta(frame)
+    vetor_en, vetor_pt, _familias, motivo = vetores_do_delta(frame)
     assert vetor_en == [] and vetor_pt == []
     assert motivo is not None
 

@@ -25,8 +25,8 @@ env:
 
 jobs:
   qualidade:
-    name: qualidade (py${{ matrix.python }})
-    runs-on: ubuntu-latest
+    name: qualidade (py${{ matrix.python }} em ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +34,26 @@ jobs:
         # Ambiente de dev diferente do CI e receita para "na minha maquina roda".
         # O 3.14 entra quando sair de release candidate e as dependencias pinadas
         # publicarem wheels para ele.
+        os: [ubuntu-latest]
         python: ["3.11", "3.12", "3.13"]
+        include:
+          # WINDOWS. Nao e zelo: e divida cobrada.
+          #
+          # O bug de fim de linha corrigido na Entrega 10 existia desde a
+          # Entrega 1 e atravessou 780 testes verdes. O CI so rodava em Linux,
+          # onde o modo texto do CPython nao traduz nada; o desenvolvimento so
+          # acontecia no Windows, onde traduz. NENHUM DOS DOIS, SOZINHO, VIA O
+          # DEFEITO -- e ele atingia justamente o `suite_sha256`, o campo que
+          # promete reprodutibilidade.
+          #
+          # Um benchmark que promete reproducao e testa numa plataforma so esta
+          # prometendo o que nao verifica.
+          #
+          # UMA versao de Python basta aqui: o eixo que este job cobre e o
+          # sistema operacional, nao o interpretador. Cruzar 3 x 2 gastaria o
+          # dobro do CI para repetir a mesma informacao.
+          - os: windows-latest
+            python: "3.13"
     steps:
       # RECOMENDACAO: pinar as actions por SHA, nao por tag. O Dependabot
       # (github-actions) mantem os SHAs atualizados via PR.

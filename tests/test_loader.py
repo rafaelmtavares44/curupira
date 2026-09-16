@@ -251,6 +251,65 @@ def test_grupo_de_variantes_com_gabarito_repetido() -> None:
     assert "grupo-gabaritos-distintos" in _regras(lint_do_dataset(tarefas))
 
 
+# --------------------------------------------------------------------------
+# Familias: a unidade de reamostragem do Delta (ADR 0006)
+# --------------------------------------------------------------------------
+
+
+def test_par_strict_sem_familia_gera_aviso() -> None:
+    """Entra no Delta como familia de um membro so — pode ser certo, pode ser esquecimento."""
+    tarefas = _tarefas(*par_strict(family_id=None))
+    problemas = lint_do_dataset(tarefas)
+    avisos = [p for p in problemas if p.regra == "familia-declarada"]
+    assert len(avisos) == 2
+    assert all(p.severidade is Severidade.AVISO for p in avisos)
+
+
+def test_par_que_declara_duas_familias_e_erro() -> None:
+    """O par e a unidade do Delta; se as versoes discordam, nao existe a familia do par."""
+    pt, en = par_strict()
+    en["family_id"] = "outra"
+    assert "familia-do-par" in _regras(lint_do_dataset(_tarefas(pt, en)))
+
+
+def test_grupo_de_variantes_espalhado_por_familias_e_erro() -> None:
+    """Variantes proximas vieram do mesmo molde, por definicao.
+
+    Espalha-las por familias diferentes as devolve ao bootstrap como observacoes
+    independentes — que e exatamente o que a familia existe para impedir.
+    """
+    tarefas = _tarefas(
+        tarefa_bruta(
+            task_id="a", canary="a-cur-nao-treinar", variant_group="g", valor=1, family_id="f1"
+        ),
+        tarefa_bruta(
+            task_id="b", canary="b-cur-nao-treinar", variant_group="g", valor=2, family_id="f2"
+        ),
+    )
+    assert "familia-do-grupo" in _regras(lint_do_dataset(tarefas))
+
+
+def test_familia_coerente_nao_gera_problema() -> None:
+    """A regra tem de ser silenciosa quando o dataset esta certo, senao vira ruido."""
+    tarefas = _tarefas(
+        tarefa_bruta(
+            task_id="a", canary="a-cur-nao-treinar", variant_group="g", valor=1, family_id="f"
+        ),
+        tarefa_bruta(
+            task_id="b", canary="b-cur-nao-treinar", variant_group="g", valor=2, family_id="f"
+        ),
+    )
+    regras = _regras(lint_do_dataset(tarefas))
+    assert "familia-do-grupo" not in regras
+    assert "familia-do-par" not in regras
+
+
+def test_tarefa_br_only_sem_familia_nao_gera_aviso() -> None:
+    """Quem nao entra no Delta nao precisa de familia: o aviso seria ruido."""
+    tarefas = _tarefas(tarefa_bruta(parity="br_only"))
+    assert "familia-declarada" not in _regras(lint_do_dataset(tarefas))
+
+
 def test_held_out_no_repositorio_publico() -> None:
     tarefas = _tarefas(tarefa_bruta(split="held_out"))
     assert "held-out-fora-do-publico" in _regras(lint_do_dataset(tarefas))

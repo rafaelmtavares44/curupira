@@ -1,19 +1,19 @@
 id: v0.1
-frozen_at: '2026-09-16T04:06:32.901879Z'
+frozen_at: '2026-09-16T18:02:40.045767Z'
 curupira_version: 0.1.0.dev0
 entries:
 - task_id: t2-money-0001
-  task_version: 2
-  sha256: 4136fdcb42d97daff5103a3fbbf6bee6ec719fdd2c69bd2367d6a5f3acce5ea0
+  task_version: 3
+  sha256: 0e865d53cfb7517718f34a1c7007764cba7b629a580cc0310af79665e8da9a80
 - task_id: t2-money-0001-en
-  task_version: 2
-  sha256: fb9de61985804923b099ea8228c73f77b8b0f4de9edf869b225b16b146cca749
+  task_version: 3
+  sha256: 48feb00bed9c866f4d4ff896b6ada920c2175e440aa8e5fb5fc98258aa83de84
 - task_id: t2-money-0002
-  task_version: 2
-  sha256: 5991d9904df6b31d245b3d4c2cb547b15ce1c17848c9e953de3cf36d569eeecf
+  task_version: 3
+  sha256: b6011c6f050c8ef133690655ff680b4642e1aeeef37e6cf2ee4f6ccabad95fef
 - task_id: t2-money-0002-en
-  task_version: 2
-  sha256: 7717b85e66410179a1eb5e4a117a48cdfe177692c4e1743b4d8e9e9ccc704c08
+  task_version: 3
+  sha256: cbb1f1d99586839cfb692a132a1df694413135360ed513da85c99f77e017fa56
 delta_subset:
 - money-0001
 - money-0002

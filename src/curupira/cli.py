@@ -617,7 +617,7 @@ def _imprimir_delta(relatorio: RelatorioDaRodada) -> None:
         f"\n[bold]Delta PT-BR[/bold] = {delta.delta:+.1%}  "
         f"IC 95% [{delta.ic_inferior:+.1%}, {delta.ic_superior:+.1%}] ({delta.metodo_ic})\n"
         f"  EN {delta.acuracia_en:.1%} · PT-BR {delta.acuracia_pt:.1%} · "
-        f"{delta.n_pares} pares strict · {delta.teste} p={delta.p_valor:.4f}",
+        f"{delta.n_pares} pares strict em {delta.n_familias} familias",
     )
     if delta.metodo_ic != METODO_BCA:
         console.print(

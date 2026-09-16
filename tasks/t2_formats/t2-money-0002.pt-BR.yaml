@@ -10,7 +10,7 @@
 # e tres e transfere 123 centavos.
 id: t2-money-0002
 schema_version: 1
-task_version: 2
+task_version: 3
 
 track: t2_formats
 locale: pt-BR
@@ -39,6 +39,12 @@ parity_notes: >-
   objeto de estudo, nao ruido a controlar. Mas quem le o Delta precisa saber
   que parte dele vem da notacao, e nao do idioma.
 generated_from: pt-BR
+
+# Familia: as duas tarefas do par money-* nascem do mesmo molde -- valor em
+# formato brasileiro que precisa virar centavos. Quem entende o separador
+# decimal acerta as duas; quem nao entende erra as duas. Sao UMA observacao
+# independente, nao duas, e o bootstrap do Delta reamostra por aqui.
+family_id: separador-decimal
 
 variant_group: money-sep-01
 

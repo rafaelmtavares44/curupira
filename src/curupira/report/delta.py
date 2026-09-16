@@ -19,6 +19,29 @@ o inverso — território clássico de McNemar.
    ferramenta**, não pegadinha para o leitor.
 3. Nenhuma tarefa pontuada por juiz entra em D.
 
+Por que não há valor-p aqui
+---------------------------
+O relatório reporta o Delta e o intervalo de confiança, e mais nada. Três
+motivos, em ordem de força:
+
+1. **O IC já contém o teste.** Um IC de 95% que não cruza zero diz `p < 0,05`;
+   um que cruza diz o contrário. Reportar os dois é redundância que só cria a
+   chance de discordarem.
+2. **Eles discordariam.** O IC sai de um bootstrap que reamostra famílias; o
+   McNemar e o Wilcoxon assumem pares independentes. Seriam dois números de
+   universos diferentes na mesma tabela, e o menos correto é o que o leitor
+   memorizaria.
+3. **Agregar por família antes do teste trocaria um problema por outro.** Com
+   ~12 famílias num piloto de 60 tarefas, o teste quase nunca daria
+   significativo mesmo com efeito real — e "p = 0,21" seria lido como "não há
+   efeito" quando significa "não há amostra".
+
+`mcnemar_exato`, `wilcoxon_pareado` e `discordantes` **continuam aqui**,
+implementados e testados contra o scipy. O que saiu foi o valor-p do produto,
+não o código. Se um dia existir um p coerente com a clusterização — por
+inversão do IC bootstrap, ou por permutação de famílias — ele volta pelo
+caminho certo. Ver ADR 0006.
+
 Por que não há scipy aqui
 -------------------------
 As três estatísticas de que precisamos cabem na biblioteca padrão:
@@ -64,6 +87,13 @@ campo `metodo_ic`, para que ninguém leia um número de piloto como se fosse
 resultado.
 """
 
+MINIMO_DE_FAMILIAS_PARA_JACKKNIFE: Final = 2
+"""Com uma família só não há o que deletar: o jackknife precisa de duas.
+
+Deletar a única família deixaria a amostra vazia, e a aceleração sairia de uma
+divisão por zero. O método degrada para percentil e declara o nome.
+"""
+
 MAXIMO_PARA_WILCOXON_EXATO: Final = 20
 """Acima disto a enumeração exata de 2^n sinais sai de mão (2^20 ≈ 1 milhão)."""
 
@@ -82,14 +112,20 @@ class ResultadoDelta(BaseModel):
     suite_id: str
     errata_revision: int
     n_pares: int
+    n_familias: int
+    """Quantas famílias distintas os pares cobrem. **É o n que vale.**
+
+    Cem pares em três famílias são três observações independentes, não cem.
+    Reportar só `n_pares` ao lado de um IC clusterizado convidaria o leitor a
+    achar que a amostra é maior do que é.
+    """
+
     acuracia_en: float
     acuracia_pt: float
     delta: float
     ic_inferior: float
     ic_superior: float
     metodo_ic: str
-    p_valor: float | None = None
-    teste: str | None = None
 
 
 def diferencas_pareadas(passou_en: Sequence[float], passou_pt: Sequence[float]) -> list[float]:
@@ -264,16 +300,59 @@ def _percentil(ordenados: Sequence[float], fracao: float) -> float:
     return ordenados[baixo] + (posicao - baixo) * (ordenados[alto] - ordenados[baixo])
 
 
-def _aceleracao(diferencas: Sequence[float]) -> float | None:
-    """Aceleração do BCa, por jackknife.
+def _agrupar_por_familia(diferencas: Sequence[float], familias: Sequence[str]) -> list[list[float]]:
+    """Junta as diferenças por família, preservando a ordem de primeira aparição.
+
+    Args:
+        diferencas: os d_i, um por par.
+        familias: o rótulo de família de cada par, na mesma ordem.
 
     Returns:
-        A aceleração, ou `None` quando a amostra não varia — nesse caso o
-        denominador é zero e não há assimetria a corrigir.
+        Uma lista de listas: cada sublista são os d_i de uma família.
+
+    Raises:
+        ValueError: se os tamanhos não baterem — um rótulo por par é o contrato,
+            e um desalinhamento aqui produziria um bootstrap sobre famílias
+            inventadas.
     """
-    n = len(diferencas)
-    total = math.fsum(diferencas)
-    medias = [(total - d) / (n - 1) for d in diferencas]
+    if len(diferencas) != len(familias):
+        msg = (
+            f"cada par precisa de um rotulo de familia: {len(diferencas)} diferencas "
+            f"para {len(familias)} rotulos"
+        )
+        raise ValueError(msg)
+    agrupadas: dict[str, list[float]] = {}
+    for diferenca, familia in zip(diferencas, familias, strict=True):
+        agrupadas.setdefault(familia, []).append(diferenca)
+    return list(agrupadas.values())
+
+
+def _aceleracao(clusters: Sequence[Sequence[float]]) -> float | None:
+    """Aceleração do BCa, por jackknife de **famílias**.
+
+    Deleta uma família inteira de cada vez, não um par. Deletar pares trataria
+    membros da mesma família como observações trocáveis, que é exatamente a
+    suposição que a clusterização recusa.
+
+    Args:
+        clusters: as diferenças agrupadas por família.
+
+    Returns:
+        A aceleração, ou `None` quando ela não é estimável: uma família só (não
+        há o que deletar), ou amostra sem variação — nesse caso o denominador é
+        zero e não há assimetria a corrigir.
+    """
+    n = len(clusters)
+    if n < MINIMO_DE_FAMILIAS_PARA_JACKKNIFE:
+        return None
+    todas = [d for cluster in clusters for d in cluster]
+    total = math.fsum(todas)
+    medias: list[float] = []
+    for cluster in clusters:
+        restante = len(todas) - len(cluster)
+        if restante == 0:
+            return None
+        medias.append((total - math.fsum(cluster)) / restante)
     media_das_medias = math.fsum(medias) / n
     desvios = [media_das_medias - m for m in medias]
     denominador = 6 * math.fsum(d**2 for d in desvios) ** 1.5
@@ -283,13 +362,27 @@ def _aceleracao(diferencas: Sequence[float]) -> float | None:
 
 
 def bootstrap_bca(
-    diferencas: Sequence[float], *, replicas: int = 10_000, seed: int = 0, alfa: float = 0.05
+    diferencas: Sequence[float],
+    familias: Sequence[str],
+    *,
+    replicas: int = 10_000,
+    seed: int = 0,
+    alfa: float = 0.05,
 ) -> tuple[float, float, str]:
-    """Intervalo de confiança BCa, reamostrando **pares**.
+    """Intervalo de confiança BCa, reamostrando **famílias**.
 
-    O par é a unidade de clusterização: reamostrar repetições em vez de pares
-    trataria as k repetições de uma tarefa como observações independentes, e elas
-    não são — o intervalo sairia estreito demais, o que é o erro que mais engana.
+    A família é a unidade de clusterização, e o motivo é o mesmo que já valia
+    para o par contra a repetição, um nível acima: tarefas geradas do mesmo
+    molde não são observações independentes. Quem entende a armadilha acerta a
+    família inteira; quem não entende erra a família inteira. Reamostrar pares
+    trataria essas tarefas como evidência separada, e o intervalo sairia
+    estreito demais — o erro que mais engana, porque produz o número mais
+    bonito.
+
+    Cada réplica sorteia `n_familias` famílias **com reposição** e toma a média
+    de todas as diferenças das famílias sorteadas. O tamanho total varia de
+    réplica para réplica, porque famílias têm tamanhos diferentes: isso é o
+    comportamento correto do bootstrap de cluster, não um defeito a corrigir.
 
     Seed fixa, porque um intervalo de confiança que muda a cada execução não é
     reprodutível, e o projeto inteiro existe para produzir número reprodutível.
@@ -299,11 +392,13 @@ def bootstrap_bca(
     - amostra sem variação alguma: o intervalo é o próprio ponto;
     - `z0` infinito (nenhuma réplica de um dos lados) ou aceleração indefinida:
       cai para percentil simples;
-    - menos de `N_MINIMO_PARA_BCA` pares: percentil, rotulado como amostra
-      insuficiente.
+    - menos de `N_MINIMO_PARA_BCA` **famílias**: percentil, rotulado como
+      amostra insuficiente. Note que o mínimo passou a contar famílias, não
+      pares: cem pares em três famílias são três observações independentes.
 
     Args:
-        diferencas: os d_i.
+        diferencas: os d_i, um por par.
+        familias: o rótulo de família de cada par, na mesma ordem.
         replicas: número de reamostragens.
         seed: seed do gerador.
         alfa: nível de significância.
@@ -313,7 +408,8 @@ def bootstrap_bca(
         o intervalo.
 
     Raises:
-        ValueError: se a lista estiver vazia ou `replicas` for menor que 1.
+        ValueError: se a lista estiver vazia, se `replicas` for menor que 1, ou
+            se diferenças e famílias não tiverem o mesmo tamanho.
     """
     if not diferencas:
         msg = "nao ha intervalo de confianca sobre zero pares"
@@ -322,6 +418,7 @@ def bootstrap_bca(
         msg = f"replicas precisa ser >= 1 (veio {replicas})"
         raise ValueError(msg)
 
+    clusters = _agrupar_por_familia(diferencas, familias)
     ponto = math.fsum(diferencas) / len(diferencas)
     if all(d == diferencas[0] for d in diferencas):
         return ponto, ponto, METODO_DEGENERADO
@@ -332,12 +429,17 @@ def bootstrap_bca(
     # Supressao local em vez de `skips` global no pyproject, para que um uso
     # realmente inseguro de `random` continue sendo pego no resto do projeto.
     gerador = random.Random(seed)  # noqa: S311  # nosec B311
-    n = len(diferencas)
-    amostras = sorted(math.fsum(gerador.choices(diferencas, k=n)) / n for _ in range(replicas))
+    n_familias = len(clusters)
+    amostras: list[float] = []
+    for _ in range(replicas):
+        sorteadas = gerador.choices(clusters, k=n_familias)
+        valores = [d for cluster in sorteadas for d in cluster]
+        amostras.append(math.fsum(valores) / len(valores))
+    amostras.sort()
 
     abaixo = sum(1 for a in amostras if a < ponto)
-    aceleracao = _aceleracao(diferencas)
-    insuficiente = n < N_MINIMO_PARA_BCA
+    aceleracao = _aceleracao(clusters)
+    insuficiente = n_familias < N_MINIMO_PARA_BCA
 
     if abaixo in (0, replicas) or aceleracao is None or insuficiente:
         metodo = METODO_AMOSTRA_INSUFICIENTE if insuficiente else METODO_PERCENTIL
@@ -351,7 +453,7 @@ def bootstrap_bca(
     return min(limites), max(limites), METODO_BCA
 
 
-def _discordantes(passou_en: Sequence[float], passou_pt: Sequence[float]) -> tuple[int, int] | None:
+def discordantes(passou_en: Sequence[float], passou_pt: Sequence[float]) -> tuple[int, int] | None:
     """Conta b e c quando os dados são binários, para o McNemar exato.
 
     Returns:
@@ -371,16 +473,15 @@ def calcular(
     errata_revision: int,
     passou_en: Sequence[float],
     passou_pt: Sequence[float],
+    *,
+    familias: Sequence[str],
 ) -> ResultadoDelta:
-    """Calcula o Delta PT-BR com intervalo de confiança.
+    """Calcula o Delta PT-BR com intervalo de confiança clusterizado por família.
 
-    O produto é "o Delta do agente X é 12 pontos, IC 95% [6, 18]", não
-    "p < 0,05". O IC é o principal; o valor-p é secundário, e o campo `metodo_ic`
-    diz por qual caminho o intervalo saiu.
-
-    A escolha do teste é automática e segue os dados, não a preferência de quem
-    escreve: com frações binárias (k = 1, ou concordância total em todas as
-    repetições) o teste é McNemar exato; com frações intermediárias, Wilcoxon.
+    O produto é "o Delta do agente X é 12 pontos, IC 95% [6, 18]". **Não há
+    valor-p**, e a ausência é decisão, não esquecimento: um IC de 95% que não
+    cruza zero já diz `p < 0,05`, e um que cruza já diz o contrário. Ver a ADR
+    0006 — resumo em `Por que não há valor-p aqui`, no topo deste módulo.
 
     Args:
         agent_id: o agente sendo pontuado.
@@ -388,12 +489,15 @@ def calcular(
         errata_revision: a revisão de errata aplicada.
         passou_en: fração de repetições que passaram em inglês, por par.
         passou_pt: idem em português.
+        familias: o rótulo de família de cada par, na mesma ordem. É a unidade
+            de reamostragem do bootstrap.
 
     Returns:
         O resultado completo.
 
     Raises:
-        ValueError: se não houver par nenhum, ou se os vetores não parearem.
+        ValueError: se não houver par nenhum, se os vetores não parearem, ou se
+            faltar rótulo de família.
     """
     if not passou_en:
         msg = (
@@ -404,26 +508,18 @@ def calcular(
         raise ValueError(msg)
 
     diferencas = diferencas_pareadas(passou_en, passou_pt)
-    inferior, superior, metodo = bootstrap_bca(diferencas)
-
-    contagens = _discordantes(passou_en, passou_pt)
-    if contagens is not None:
-        b, c = contagens
-        p_valor, teste = mcnemar_exato(b, c), "mcnemar_exato"
-    else:
-        p_valor, teste = wilcoxon_pareado(diferencas), "wilcoxon_pareado"
+    inferior, superior, metodo = bootstrap_bca(diferencas, familias)
 
     return ResultadoDelta(
         agent_id=agent_id,
         suite_id=suite_id,
         errata_revision=errata_revision,
         n_pares=len(diferencas),
+        n_familias=len(set(familias)),
         acuracia_en=math.fsum(passou_en) / len(passou_en),
         acuracia_pt=math.fsum(passou_pt) / len(passou_pt),
         delta=math.fsum(diferencas) / len(diferencas),
         ic_inferior=inferior,
         ic_superior=superior,
         metodo_ic=metodo,
-        p_valor=p_valor,
-        teste=teste,
     )

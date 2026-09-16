@@ -36,6 +36,7 @@ from curupira.report.delta import (
     bootstrap_bca,
     calcular,
     diferencas_pareadas,
+    discordantes,
     mcnemar_exato,
     wilcoxon_pareado,
 )
@@ -187,8 +188,29 @@ def test_wilcoxon_devolve_probabilidade(diferencas: list[float]) -> None:
 # --------------------------------------------------------------------------
 
 
+def _singleton(quantos: int) -> list[str]:
+    """Um rótulo de família por par: cada par é a própria família.
+
+    Nesse caso o bootstrap de cluster degenera **exatamente** no bootstrap
+    simples, e é por isso que as constantes conferidas contra o scipy continuam
+    valendo depois da clusterização. A equivalência é o que garante que a
+    mudança não alterou o método, só a unidade.
+
+    Args:
+        quantos: quantos pares.
+
+    Returns:
+        Os rótulos, todos distintos.
+    """
+    return [f"f{i}" for i in range(quantos)]
+
+
+FAMILIAS_DE_REFERENCIA = _singleton(len(DIFERENCAS_DE_REFERENCIA))
+"""Uma família por par, para as constantes conferidas contra o scipy."""
+
+
 def test_bca_bate_com_o_scipy_dentro_do_ruido_de_reamostragem() -> None:
-    inferior, superior, metodo = bootstrap_bca(DIFERENCAS_DE_REFERENCIA)
+    inferior, superior, metodo = bootstrap_bca(DIFERENCAS_DE_REFERENCIA, FAMILIAS_DE_REFERENCIA)
     assert metodo == METODO_BCA
     assert (inferior, superior) == pytest.approx(BCA_DE_REFERENCIA, abs=1e-9)
     assert inferior == pytest.approx(BCA_DO_SCIPY[0], abs=TOLERANCIA_ENTRE_GERADORES)
@@ -200,40 +222,40 @@ def test_bca_e_reprodutivel() -> None:
 
     O projeto inteiro existe para produzir numero reprodutivel.
     """
-    primeiro = bootstrap_bca(DIFERENCAS_DE_REFERENCIA, replicas=2000)
-    segundo = bootstrap_bca(DIFERENCAS_DE_REFERENCIA, replicas=2000)
+    primeiro = bootstrap_bca(DIFERENCAS_DE_REFERENCIA, FAMILIAS_DE_REFERENCIA, replicas=2000)
+    segundo = bootstrap_bca(DIFERENCAS_DE_REFERENCIA, FAMILIAS_DE_REFERENCIA, replicas=2000)
     assert primeiro == segundo
 
 
 def test_bca_cobre_o_ponto_estimado() -> None:
-    inferior, superior, _ = bootstrap_bca(DIFERENCAS_DE_REFERENCIA)
+    inferior, superior, _ = bootstrap_bca(DIFERENCAS_DE_REFERENCIA, FAMILIAS_DE_REFERENCIA)
     media = math.fsum(DIFERENCAS_DE_REFERENCIA) / len(DIFERENCAS_DE_REFERENCIA)
     assert inferior <= media <= superior
 
 
 def test_bca_sem_variacao_devolve_o_proprio_ponto() -> None:
     """Jackknife com variância zero não tem assimetria a corrigir."""
-    assert bootstrap_bca([0.3] * 8, replicas=500) == (0.3, 0.3, METODO_DEGENERADO)
+    assert bootstrap_bca([0.3] * 8, _singleton(8), replicas=500) == (0.3, 0.3, METODO_DEGENERADO)
 
 
 def test_bca_com_amostra_pequena_declara_o_nome() -> None:
     """Degradar em silêncio seria pior: alguém leria número de piloto como resultado."""
-    _, _, metodo = bootstrap_bca([0.1, 0.9, 0.5], replicas=500)
+    _, _, metodo = bootstrap_bca([0.1, 0.9, 0.5], _singleton(3), replicas=500)
     assert metodo == METODO_AMOSTRA_INSUFICIENTE
 
 
 def test_bca_com_um_par_so() -> None:
-    assert bootstrap_bca([0.4], replicas=100) == (0.4, 0.4, METODO_DEGENERADO)
+    assert bootstrap_bca([0.4], _singleton(1), replicas=100) == (0.4, 0.4, METODO_DEGENERADO)
 
 
 def test_bca_recusa_amostra_vazia() -> None:
     with pytest.raises(ValueError, match="zero pares"):
-        bootstrap_bca([])
+        bootstrap_bca([], [])
 
 
 def test_bca_recusa_replicas_invalidas() -> None:
     with pytest.raises(ValueError, match="replicas"):
-        bootstrap_bca([0.1, 0.2], replicas=0)
+        bootstrap_bca([0.1, 0.2], _singleton(2), replicas=0)
 
 
 # --------------------------------------------------------------------------
@@ -261,25 +283,40 @@ def test_fracao_fora_do_intervalo_e_erro() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_calcular_escolhe_mcnemar_com_dados_binarios() -> None:
-    """Com k = 1 o teste certo e o exato de McNemar, escolhido pelos dados."""
+def test_o_resultado_do_delta_nao_carrega_valor_p() -> None:
+    """ADR 0006: o IC ja contem o teste; reportar os dois so cria discordancia.
+
+    O IC sai de bootstrap por familias, e McNemar e Wilcoxon assumem pares
+    independentes. Os dois numeros viriam de universos diferentes, e o menos
+    correto e o que o leitor memorizaria.
+    """
     en = [1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     pt = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0]
-    resultado = calcular("agente", "v0.1", 0, en, pt)
-    assert resultado.teste == "mcnemar_exato"
+    resultado = calcular("agente", "v0.1", 0, en, pt, familias=_singleton(len(en)))
+
+    assert not hasattr(resultado, "p_valor")
+    assert not hasattr(resultado, "teste")
     assert resultado.n_pares == 12
     assert resultado.delta == pytest.approx(9 / 12)
 
 
-def test_calcular_escolhe_wilcoxon_com_fracoes() -> None:
-    en = [1.0, 0.67, 0.33, 1.0, 0.67]
-    pt = [0.33, 0.33, 0.0, 0.67, 0.33]
-    assert calcular("agente", "v0.1", 0, en, pt).teste == "wilcoxon_pareado"
+def test_as_funcoes_de_teste_continuam_disponiveis() -> None:
+    """Sairam do produto, nao do codigo.
+
+    Se um dia existir um valor-p coerente com a clusterizacao, ele volta por
+    aqui. Apagar codigo correto e testado seria desperdicio.
+    """
+    assert mcnemar_exato(9, 2) > 0.0
+    assert wilcoxon_pareado([0.2, -0.1, 0.4]) > 0.0
+    assert discordantes([1.0, 0.0], [0.0, 0.0]) == (1, 0)
+    assert discordantes([0.5, 0.0], [0.0, 0.0]) is None
 
 
 def test_calcular_reporta_as_duas_acuracias() -> None:
     """O Delta sozinho não diz se o agente é bom; diz o que o idioma custa."""
-    resultado = calcular("agente", "v0.1", 0, [1.0, 1.0, 0.0, 1.0], [1.0, 0.0, 0.0, 0.0])
+    resultado = calcular(
+        "agente", "v0.1", 0, [1.0, 1.0, 0.0, 1.0], [1.0, 0.0, 0.0, 0.0], familias=_singleton(4)
+    )
     assert resultado.acuracia_en == pytest.approx(0.75)
     assert resultado.acuracia_pt == pytest.approx(0.25)
     assert resultado.delta == pytest.approx(0.5)
@@ -287,19 +324,19 @@ def test_calcular_reporta_as_duas_acuracias() -> None:
 
 def test_delta_positivo_significa_pt_pior() -> None:
     """O sinal é a manchete: positivo = falar português custa pontos."""
-    assert calcular("a", "v0.1", 0, [1.0, 1.0], [0.0, 0.0]).delta > 0
-    assert calcular("a", "v0.1", 0, [0.0, 0.0], [1.0, 1.0]).delta < 0
+    assert calcular("a", "v0.1", 0, [1.0, 1.0], [0.0, 0.0], familias=_singleton(2)).delta > 0
+    assert calcular("a", "v0.1", 0, [0.0, 0.0], [1.0, 1.0], familias=_singleton(2)).delta < 0
 
 
 def test_calcular_sem_par_nenhum_estoura() -> None:
     """Um Delta de zero pares seria um número inventado."""
     with pytest.raises(ValueError, match="subconjunto do Delta esta vazio"):
-        calcular("agente", "v0.1", 0, [], [])
+        calcular("agente", "v0.1", 0, [], [], familias=[])
 
 
 def test_calcular_carrega_a_procedencia() -> None:
     """Comparar Deltas de suítes ou erratas diferentes tem de ser detectável."""
-    resultado = calcular("agente-x", "v0.2", 3, [1.0, 0.0], [0.0, 0.0])
+    resultado = calcular("agente-x", "v0.2", 3, [1.0, 0.0], [0.0, 0.0], familias=_singleton(2))
     assert resultado.agent_id == "agente-x"
     assert resultado.suite_id == "v0.2"
     assert resultado.errata_revision == 3
@@ -308,11 +345,95 @@ def test_calcular_carrega_a_procedencia() -> None:
 
 def test_percentil_com_uma_replica_so() -> None:
     """Guarda de borda: com uma reamostragem o intervalo degenera no ponto."""
-    inferior, superior, _ = bootstrap_bca([0.1, 0.9], replicas=1)
+    inferior, superior, _ = bootstrap_bca([0.1, 0.9], _singleton(2), replicas=1)
     assert inferior == superior
 
 
 def test_bca_com_replicas_poucas_ainda_devolve_intervalo() -> None:
-    inferior, superior, metodo = bootstrap_bca([0.0, 0.5, 1.0, 0.5], replicas=3)
+    inferior, superior, metodo = bootstrap_bca([0.0, 0.5, 1.0, 0.5], _singleton(4), replicas=3)
     assert inferior <= superior
     assert metodo == METODO_AMOSTRA_INSUFICIENTE
+
+
+# --------------------------------------------------------------------------
+# A clusterizacao por familia
+# --------------------------------------------------------------------------
+
+
+def test_familias_singleton_reproduzem_o_bootstrap_por_par() -> None:
+    """A equivalencia que sustenta as constantes conferidas contra o scipy.
+
+    Com uma familia por par, o bootstrap de cluster e o bootstrap simples. Se
+    este teste cair, a clusterizacao mudou o metodo, nao so a unidade — e os
+    valores de referencia deixaram de valer.
+    """
+    inferior, superior, metodo = bootstrap_bca(DIFERENCAS_DE_REFERENCIA, FAMILIAS_DE_REFERENCIA)
+    assert metodo == METODO_BCA
+    assert (inferior, superior) == pytest.approx(BCA_DE_REFERENCIA, abs=1e-9)
+
+
+def test_reamostrar_familias_alarga_o_intervalo() -> None:
+    """O ponto inteiro da entrega, em um assert.
+
+    Doze pares em tres familias sao TRES observacoes independentes, nao doze.
+    Tratar como doze produz um intervalo estreito demais — o erro que mais
+    engana, porque devolve o numero mais bonito.
+
+    As diferencas sao correlacionadas dentro da familia de proposito: e assim
+    que tarefas do mesmo molde se comportam, e e so nesse caso que a
+    clusterizacao muda alguma coisa.
+    """
+    diferencas = [*[0.9, 0.8, 0.9, 0.8], *[0.1, 0.0, 0.1, 0.0], *[0.5, 0.4, 0.5, 0.4]]
+    tres_familias = [*["a"] * 4, *["b"] * 4, *["c"] * 4]
+
+    largura_agrupada = _largura(bootstrap_bca(diferencas, tres_familias, replicas=4000))
+    largura_solta = _largura(bootstrap_bca(diferencas, _singleton(12), replicas=4000))
+
+    assert largura_agrupada > largura_solta
+
+
+def _largura(intervalo: tuple[float, float, str]) -> float:
+    """Largura do intervalo devolvido pelo bootstrap.
+
+    Args:
+        intervalo: a tripla (inferior, superior, metodo).
+
+    Returns:
+        A largura.
+    """
+    inferior, superior, _ = intervalo
+    return superior - inferior
+
+
+def test_o_minimo_para_bca_conta_familias_e_nao_pares() -> None:
+    """Cem pares em tres familias sao tres observacoes independentes.
+
+    Sem esta regra, um dataset com muitas variantes de poucos moldes escaparia
+    do rotulo de amostra insuficiente sem nunca ter tido amostra.
+    """
+    diferencas = [0.1 * (i % 7) for i in range(30)]
+    poucas_familias = [f"f{i % 3}" for i in range(30)]
+
+    _, _, metodo = bootstrap_bca(diferencas, poucas_familias, replicas=500)
+    assert metodo == METODO_AMOSTRA_INSUFICIENTE
+
+
+def test_familia_unica_nao_estima_aceleracao() -> None:
+    """Com uma familia so nao ha o que deletar no jackknife."""
+    _, _, metodo = bootstrap_bca([0.1, 0.9, 0.5, 0.2], ["unica"] * 4, replicas=500)
+    assert metodo == METODO_AMOSTRA_INSUFICIENTE
+
+
+def test_rotulo_de_familia_faltando_e_erro() -> None:
+    """Um rotulo por par e o contrato; desalinhar inventaria familias."""
+    with pytest.raises(ValueError, match="rotulo de familia"):
+        bootstrap_bca([0.1, 0.2, 0.3], ["a", "b"])
+
+
+def test_calcular_reporta_quantas_familias() -> None:
+    """`n_pares` sozinho, ao lado de um IC clusterizado, infla a amostra aos olhos."""
+    en = [1.0, 1.0, 1.0, 0.0]
+    pt = [0.0, 0.0, 1.0, 0.0]
+    resultado = calcular("agente", "v0.1", 0, en, pt, familias=["a", "a", "b", "b"])
+    assert resultado.n_pares == 4
+    assert resultado.n_familias == 2

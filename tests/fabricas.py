@@ -129,12 +129,16 @@ def tarefa_bruta(
     return bruto
 
 
-def par_strict(pair_id: str = "fab-0001", *, valor: int = 123456) -> list[dict[str, Any]]:
+def par_strict(
+    pair_id: str = "fab-0001", *, valor: int = 123456, family_id: str | None = "fab-familia"
+) -> list[dict[str, Any]]:
     """Monta um par strict completo, PT-BR e EN-US.
 
     Args:
         pair_id: o id do par.
         valor: o gabarito, idêntico nos dois idiomas.
+        family_id: a família das duas versões. `None` monta um par sem família
+            declarada, que é o caso que o lint avisa.
 
     Returns:
         Os dois mapeamentos brutos.
@@ -149,6 +153,7 @@ def par_strict(pair_id: str = "fab-0001", *, valor: int = 123456) -> list[dict[s
             pair_id=pair_id,
             valor=valor,
             parity_notes=notas,
+            family_id=family_id,
         ),
         tarefa_bruta(
             task_id=f"{pair_id}-en",
@@ -158,5 +163,6 @@ def par_strict(pair_id: str = "fab-0001", *, valor: int = 123456) -> list[dict[s
             pair_id=pair_id,
             valor=valor,
             parity_notes=notas,
+            family_id=family_id,
         ),
     ]

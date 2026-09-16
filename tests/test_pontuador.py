@@ -525,11 +525,20 @@ def test_o_valor_errado_continua_reprovando_com_qualquer_favorecido(
         assert veredicto.desfecho is not Desfecho.PASSOU, (tarefa, favorecido)
 
 
-def test_as_tarefas_do_par_subiram_de_versao() -> None:
-    """Tarefa corrigida nunca muda em silêncio.
+def test_o_par_inteiro_anda_junto_de_versao() -> None:
+    """Tarefa corrigida nunca muda em silêncio — e nunca muda pela metade.
 
-    Se alguém editar o conteúdo e esquecer o `task_version`, um resultado antigo
-    passa a ser comparado com uma tarefa que não é mais a mesma.
+    Este teste já fixou o número da versão, e isso se mostrou errado: ele
+    quebrava a cada correção legítima e obrigava a editar o teste junto, o que é
+    exatamente o ruído que faz alguém parar de ler a falha.
+
+    A garantia que sobra é a que importa e não envelhece: as quatro tarefas do
+    par estão **na mesma versão** e nenhuma continua na versão 1. Um par cujas
+    versões divergem foi editado pela metade, e aí um resultado antigo passa a
+    ser comparado com uma tarefa que não é mais a mesma.
     """
-    for nome in ("t2-money-0001", "t2-money-0001-en", "t2-money-0002", "t2-money-0002-en"):
-        assert _tarefa_do_disco(nome).task_version == 2, nome
+    nomes = ("t2-money-0001", "t2-money-0001-en", "t2-money-0002", "t2-money-0002-en")
+    versoes = {nome: _tarefa_do_disco(nome).task_version for nome in nomes}
+
+    assert len(set(versoes.values())) == 1, f"o par se partiu entre versoes: {versoes}"
+    assert min(versoes.values()) > 1, "as tarefas foram corrigidas; a versao tinha de ter subido"

@@ -259,7 +259,26 @@ def _metricas(trilha: str, linhas: pl.DataFrame, tarefas: Sequence[Tarefa]) -> M
     )
 
 
-def vetores_do_delta(pontuado: pl.DataFrame) -> tuple[list[float], list[float], str | None]:
+def _rotulo_de_familia(pair_id: str, family_id: str | None) -> str:
+    """Rótulo de família de um par, com prefixo que impede colisão.
+
+    Um par sem `family_id` é uma família de um membro só, identificada pelo
+    próprio par. Os prefixos existem para que um `family_id` chamado por acaso
+    como um `pair_id` não funda duas famílias diferentes em silêncio.
+
+    Args:
+        pair_id: o identificador do par.
+        family_id: a família declarada, ou `None`.
+
+    Returns:
+        O rótulo a usar na reamostragem.
+    """
+    return f"fam:{family_id}" if family_id is not None else f"par:{pair_id}"
+
+
+def vetores_do_delta(
+    pontuado: pl.DataFrame,
+) -> tuple[list[float], list[float], list[str], str | None]:
     """Extrai os vetores pareados do Delta, aplicando os três invariantes.
 
     Entra no subconjunto D o par que cumpre **todas** as condições:
@@ -277,8 +296,9 @@ def vetores_do_delta(pontuado: pl.DataFrame) -> tuple[list[float], list[float], 
         pontuado: o `scored.parquet` de UM agente.
 
     Returns:
-        As frações por par em EN e em PT, na mesma ordem de `pair_id`, e o motivo
-        de o subconjunto estar vazio quando estiver.
+        As frações por par em EN e em PT, o rótulo de família de cada par — os
+        três na mesma ordem de `pair_id` — e o motivo de o subconjunto estar
+        vazio quando estiver.
     """
     strict = pontuado.filter(
         (pl.col("parity") == Paridade.STRICT.value)
@@ -287,7 +307,7 @@ def vetores_do_delta(pontuado: pl.DataFrame) -> tuple[list[float], list[float], 
         & ~pl.col("outcome").is_in(FORA_DO_DENOMINADOR)
     )
     if strict.is_empty():
-        return [], [], "nenhuma execucao strict decidida por camada objetiva"
+        return [], [], [], "nenhuma execucao strict decidida por camada objetiva"
 
     por_par = (
         strict.group_by(["pair_id", "locale"])
@@ -296,12 +316,20 @@ def vetores_do_delta(pontuado: pl.DataFrame) -> tuple[list[float], list[float], 
     )
     pt, en = Locale.PT_BR.value, Locale.EN_US.value
     if pt not in por_par.columns or en not in por_par.columns:
-        return [], [], "os pares strict nao tem as duas versoes decididas"
+        return [], [], [], "os pares strict nao tem as duas versoes decididas"
 
     completos = por_par.filter(pl.col(pt).is_not_null() & pl.col(en).is_not_null()).sort("pair_id")
     if completos.is_empty():
-        return [], [], "nenhum par strict ficou com as duas versoes decididas"
-    return completos[en].to_list(), completos[pt].to_list(), None
+        return [], [], [], "nenhum par strict ficou com as duas versoes decididas"
+
+    # O lint garante que as duas versoes de um par declaram a mesma familia, e
+    # e por isso que `first()` basta aqui. Se o lint cair, isto passa a escolher
+    # uma das duas em silencio — a garantia mora la, nao aqui.
+    declarada = dict(
+        strict.group_by("pair_id").agg(pl.col("family_id").first().alias("familia")).iter_rows()
+    )
+    familias = [_rotulo_de_familia(par, declarada.get(par)) for par in completos["pair_id"]]
+    return completos[en].to_list(), completos[pt].to_list(), familias, None
 
 
 def agregar(
@@ -352,10 +380,10 @@ def agregar(
         for trilha in sorted(set(elegiveis["track"].to_list()))
     }
 
-    en, pt, motivo = vetores_do_delta(elegiveis)
+    en, pt, familias, motivo = vetores_do_delta(elegiveis)
     suite_id = str(frame["suite_id"][0])
     revisao = errata.revision if errata else 0
-    delta = calcular(agentes[0], suite_id, revisao, en, pt) if en else None
+    delta = calcular(agentes[0], suite_id, revisao, en, pt, familias=familias) if en else None
 
     notas = todas_as_notas(sem_errata) if sem_errata else {}
     melhor: PoliticaTrivial | None = None

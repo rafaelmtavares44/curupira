@@ -135,10 +135,12 @@ class ResultadoDeRodada(BaseModel):
     parity: Paridade
     pair_id: str | None = None
     variant_group: str | None = None
+    family_id: str | None = None
     """O contexto da tarefa viaja junto com o resultado, e não por conveniência.
 
     O Delta PT-BR pareia por `pair_id` e filtra por `parity`; a consistência de
-    grupo agrupa por `variant_group`. Se esses campos ficassem só no dataset, o
+    grupo agrupa por `variant_group`; o bootstrap reamostra `family_id`. Se
+    esses campos ficassem só no dataset, o
     agregador teria de recarregá-lo e reconciliar — e reconciliar contra um
     dataset que mudou desde a rodada é exatamente o erro silencioso que a suíte
     congelada existe para impedir. Aqui eles são um retrato do que valia quando a
