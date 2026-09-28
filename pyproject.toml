@@ -3,7 +3,7 @@
 # usa, alem disso, um lockfile com hash (ver docs/adr/0002).
 
 [build-system]
-requires = ["hatchling==1.32.0"]
+requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [project]
