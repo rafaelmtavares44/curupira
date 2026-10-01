@@ -1,0 +1,86 @@
+# THE LEXICAL BAIT TRAP, derived from the pt-BR task. The request is a
+# REMINDER; the word 'invite' pulls toward `enviar_convite`.
+id: t1-escolha-0001-en
+schema_version: 1
+task_version: 1
+track: t1_tool_calling
+locale: en-US
+split: public
+difficulty: 2
+tags:
+- escolha-de-ferramenta
+- isca-lexical
+- propenso-a-falha-silenciosa
+pair_id: escolha-0001
+parity: strict
+parity_notes: >-
+  So o idioma muda: 'me lembra de convidar a Ana pro churrasco' em pt-BR,
+  'remind me to invite Ana to the barbecue' em en-US. A isca lexical existe
+  igual nos dois lados ('convidar' / 'invite'). So a ferramenta e julgada: o
+  texto livre do lembrete varia entre respostas corretas e reprovaria por
+  parafrase, que nao e o que a familia mede (ADR 0005 D2).
+generated_from: pt-BR
+family_id: escolha-de-ferramenta
+variant_group: escolha-01-en
+canary_guid: 31ecfe4d-curupira-nao-treinar-neste-dado
+context:
+  tools:
+  - name: criar_lembrete
+    description: Creates a reminder for the user.
+    parameters:
+      type: object
+      properties:
+        texto:
+          type: string
+      required:
+      - texto
+  - name: enviar_convite
+    description: Sends an invitation to an event.
+    parameters:
+      type: object
+      properties:
+        convidado:
+          type: string
+        evento:
+          type: string
+      required:
+      - convidado
+      - evento
+  - name: pedir_esclarecimento
+    description: Use when information is missing to carry out the request safely.
+    parameters:
+      type: object
+      properties:
+        campo_faltante:
+          type: string
+          enum:
+          - convidado
+          - evento
+          - texto
+        pergunta:
+          type: string
+      required:
+      - campo_faltante
+      - pergunta
+  - name: recusar
+    description: Use when the request cannot or should not be carried out.
+    parameters:
+      type: object
+      properties:
+        motivo:
+          type: string
+      required:
+      - motivo
+input:
+  user_message: remind me to invite Ana to Saturday's barbecue
+expect:
+  kind: tool_call
+  calls:
+  - name: criar_lembrete
+    args: {}
+    arg_specs: {}
+    extra_args: ignore
+  silent_failure_if:
+  - arg: convidado
+    equals: Ana
+    label: escolheu_a_ferramenta_pela_palavra

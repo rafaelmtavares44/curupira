@@ -780,3 +780,104 @@ def test_tarefa_sem_pedir_esclarecimento_nao_e_cobrada_por_esta_regra() -> None:
     ]
     assert "esclarecimento-por-identificador" not in _regras(lint_do_dataset(_tarefas(bruto)))
     assert _esclarecimento(tarefa_bruta())["name"] == "pedir_esclarecimento"
+
+
+# --------------------------------------------------------------------------
+# O gabarito obedece ao schema da ferramenta (Entrega 19)
+# --------------------------------------------------------------------------
+
+
+def _gabarito(bruto: dict[str, Any]) -> dict[str, Any]:
+    """Os `args` da primeira chamada da primeira alternativa."""
+    args = bruto["expect"]["accept"][0]["calls"][0]["args"]
+    assert isinstance(args, dict)
+    return args
+
+
+def test_horario_sem_aspas_vira_inteiro_e_o_lint_explica() -> None:
+    """A armadilha do YAML 1.1: `14:00` sem aspas é o inteiro 840.
+
+    O teste do gabarito não pega isso — 840 contra 840 é coerente consigo
+    mesmo. Só o schema da ferramenta sabe que ali vai texto.
+    """
+    lido = yaml.safe_load("hora: 14:00")
+    assert lido == {"hora": 840}, "premissa do teste: o PyYAML segue o YAML 1.1"
+
+    bruto = tarefa_bruta()
+    _gabarito(bruto)["favorecido"] = lido["hora"]
+    problemas = [p for p in lint_do_dataset(_tarefas(bruto)) if p.regra == "gabarito-tipado"]
+    assert problemas
+    assert "sexagesimal" in problemas[0].mensagem
+    assert "aspas" in problemas[0].mensagem
+
+
+def test_booleano_onde_o_schema_pede_inteiro_e_erro() -> None:
+    """`True` é `int` em Python; num `valor_centavos` é defeito, não "1 centavo"."""
+    bruto = tarefa_bruta()
+    _gabarito(bruto)["valor_centavos"] = True
+    assert "gabarito-tipado" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_valor_fora_do_enum_no_gabarito_e_erro() -> None:
+    bruto = tarefa_bruta()
+    bruto["context"]["tools"] = [
+        {
+            **f,
+            "parameters": {
+                **f["parameters"],
+                "properties": {
+                    **f["parameters"]["properties"],
+                    "favorecido": {"type": "string", "enum": ["Souza"]},
+                },
+            },
+        }
+        if f["name"] == "criar_transferencia"
+        else f
+        for f in bruto["context"]["tools"]
+    ]
+    assert "gabarito-tipado" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_argumento_do_gabarito_fora_do_schema_e_erro() -> None:
+    """O agente não tem como enviar o que a ferramenta não declara."""
+    bruto = tarefa_bruta()
+    _gabarito(bruto)["moeda"] = "BRL"
+    _specs(bruto)["moeda"] = {"matcher": "exact_str"}
+    assert "gabarito-tipado" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_rotulo_com_tipo_errado_e_erro() -> None:
+    """Um rótulo com valor que o agente nunca envia nunca rotula nada."""
+    bruto = tarefa_bruta()
+    bruto["expect"]["silent_failure_if"] = [
+        {"arg": "valor_centavos", "equals": "123456000", "label": "string_onde_vai_inteiro"}
+    ]
+    assert "gabarito-tipado" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_rotulo_de_argumento_que_nenhuma_ferramenta_declara_e_erro() -> None:
+    bruto = tarefa_bruta()
+    bruto["expect"]["silent_failure_if"] = [{"arg": "inexistente", "equals": 1, "label": "x"}]
+    assert "gabarito-tipado" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_rotulo_fora_do_enum_e_permitido() -> None:
+    """Agente viola `enum`; o erro rotulado pode estar fora dele, o gabarito não."""
+    bruto = tarefa_bruta()
+    bruto["expect"]["silent_failure_if"] = [
+        {"arg": "favorecido", "equals": "Souza", "label": "favorecido_errado"}
+    ]
+    assert "gabarito-tipado" not in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_gabarito_bem_tipado_passa() -> None:
+    assert "gabarito-tipado" not in _regras(lint_do_dataset(_tarefas(*par_strict())))
+
+
+def test_tarefa_congelada_com_gabarito_mal_tipado_nao_e_cobrada() -> None:
+    """Regra nova governa tarefa livre (ADR 0010); a congelada vai para a errata."""
+    pt, en = par_strict()
+    _gabarito(pt)["favorecido"] = 840
+    _gabarito(en)["favorecido"] = 840
+    tarefas = _tarefas(pt, en)
+    assert "gabarito-tipado" not in _regras(lint_do_dataset(tarefas, suites=[_congelada(tarefas)]))

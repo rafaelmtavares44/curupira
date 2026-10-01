@@ -34,6 +34,11 @@ isolar a língua natural — passaria a medir também a tradução do esquema.
 
 **Só mudam de idioma:** a `description` da ferramenta e a `input.user_message`.
 
+**Exceção declarada:** a família `ferramenta-em-ingles` nomeia e descreve a
+ferramenta de negócio em inglês **nas duas versões** — o objeto dela é
+justamente o usuário falando português com uma ferramenta em inglês. Cada par
+dessa família diz isso no próprio `parity_notes`.
+
 Isto não é um limite do benchmark; é o controle experimental dele. O caso
 "ferramenta descrita em inglês com usuário falando português" é uma trilha
 própria, a T1, onde a diferença é o objeto de estudo e não ruído.
@@ -121,6 +126,10 @@ qual tarefa. O lint `canario-unico` cobra isso.
 
 Nunca lógica embutida no YAML. O dataset é declarativo e auditável por humano; a
 lógica vive em Python, testada e coberta.
+
+O gabarito obedece ao schema da ferramenta: tipo e `enum` de cada argumento
+esperado são conferidos pelo lint `gabarito-tipado`. **Horário vai entre
+aspas** — no YAML 1.1, que o PyYAML segue, `14:00` sem aspas é o inteiro 840.
 
 Nenhum default do harness pode depender de locale (**ADR 0009**). Onde a régua
 admite convenção — datas, por exemplo — a tarefa **declara** os formatos

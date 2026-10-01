@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, JsonValue
 
 from curupira.core.enums import Locale, Paridade, Split
 from curupira.core.expect import (
@@ -733,6 +733,120 @@ def _lint_esclarecimento_por_identificador(
     return problemas
 
 
+_TIPOS_JSON: dict[str, tuple[type, ...]] = {
+    "string": (str,),
+    "integer": (int,),
+    "number": (int, float),
+    "boolean": (bool,),
+    "array": (list,),
+    "object": (dict,),
+}
+"""Tipo do JSON Schema para os tipos Python que o YAML produz."""
+
+
+def _tipo_confere(valor: JsonValue, tipo: str) -> bool:
+    """Diz se o valor tem o tipo JSON Schema declarado.
+
+    `bool` é subclasse de `int` em Python; um `True` onde se declarou `integer`
+    não é "1", é defeito — a mesma regra do matcher `exact_int`.
+    """
+    aceitos = _TIPOS_JSON.get(tipo)
+    if aceitos is None:
+        return True
+    if isinstance(valor, bool) and bool not in aceitos:
+        return False
+    return isinstance(valor, aceitos)
+
+
+def _propriedade(tarefa: Tarefa, ferramenta: str | None, arg: str) -> dict[str, JsonValue] | None:
+    """A definição JSON Schema do argumento, na ferramenta indicada ou em qualquer uma."""
+    for definicao in tarefa.context.tools:
+        if ferramenta is not None and definicao.name != ferramenta:
+            continue
+        propriedades = definicao.parameters.get("properties")
+        propriedade = propriedades.get(arg) if isinstance(propriedades, dict) else None
+        if isinstance(propriedade, dict):
+            return propriedade
+    return None
+
+
+def _defeito_de_tipo(
+    valor: JsonValue, propriedade: dict[str, JsonValue], *, cobrar_enum: bool
+) -> str | None:
+    tipo = propriedade.get("type")
+    if isinstance(tipo, str) and not _tipo_confere(valor, tipo):
+        dica = ""
+        if tipo == "string" and isinstance(valor, int) and not isinstance(valor, bool):
+            dica = (
+                ". Se era um horario como 14:00, o YAML 1.1 leu como inteiro "
+                "sexagesimal (14*60 = 840): ponha entre aspas"
+            )
+        return (
+            f"o schema declara '{tipo}' e o gabarito traz {valor!r} ({type(valor).__name__}){dica}"
+        )
+    enum = propriedade.get("enum")
+    if cobrar_enum and isinstance(enum, list) and valor not in enum:
+        return f"{valor!r} nao esta no enum {enum} que o schema declara"
+    return None
+
+
+def _lint_gabarito_tipado(
+    tarefas: Sequence[Tarefa], congelados: frozenset[str]
+) -> list[ProblemaDeLint]:
+    """O gabarito obedece ao schema da ferramenta que ele mesmo descreve.
+
+    A armadilha que motivou esta regra é do YAML, não nossa: na versão 1.1, que o
+    PyYAML segue, `14:00` sem aspas é o **inteiro 840**. Uma tarefa escrita à mão
+    com `hora_hhmm: 14:00` reprovaria todo agente — que manda `"14:00"`, como o
+    schema pede — e nem o lint nem o teste do gabarito notariam, porque 840
+    contra 840 é coerente consigo mesmo. Só o schema sabe que ali vai texto.
+
+    Confere os argumentos esperados (tipo e `enum`) e os valores de
+    `silent_failure_if` (só tipo: um erro rotulado pode estar fora do `enum`,
+    porque agente viola `enum`). Só tarefa livre (ADR 0010).
+    """
+    problemas: list[ProblemaDeLint] = []
+    for tarefa in tarefas:
+        if tarefa.id in congelados:
+            continue
+        for chamada in _chamadas_esperadas(tarefa):
+            for arg, valor in sorted(chamada.args.items()):
+                propriedade = _propriedade(tarefa, chamada.name, arg)
+                if propriedade is None:
+                    problemas.append(
+                        _erro(
+                            "gabarito-tipado",
+                            tarefa.id,
+                            f"'{chamada.name}.{arg}' esta no gabarito e nao no schema da "
+                            "ferramenta: o agente nao tem como saber que deve envia-lo",
+                        )
+                    )
+                    continue
+                defeito = _defeito_de_tipo(valor, propriedade, cobrar_enum=True)
+                if defeito:
+                    problemas.append(
+                        _erro("gabarito-tipado", tarefa.id, f"'{chamada.name}.{arg}': {defeito}")
+                    )
+        if isinstance(tarefa.expect, EsperaChamadaDeFerramenta):
+            for regra in tarefa.expect.silent_failure_if:
+                propriedade = _propriedade(tarefa, None, regra.arg)
+                defeito = (
+                    _defeito_de_tipo(regra.equals, propriedade, cobrar_enum=False)
+                    if propriedade
+                    else f"nenhuma ferramenta declara o argumento '{regra.arg}'"
+                )
+                if defeito:
+                    problemas.append(
+                        _erro(
+                            "gabarito-tipado",
+                            tarefa.id,
+                            f"silent_failure_if '{regra.label}': {defeito}. Um rotulo com "
+                            "valor que o agente nunca envia nunca rotula nada",
+                        )
+                    )
+    return problemas
+
+
 def _lint_notas_especificas(
     tarefas: Sequence[Tarefa], congelados: frozenset[str]
 ) -> list[ProblemaDeLint]:
@@ -849,6 +963,7 @@ def lint_do_dataset(
     congelados = ids_congelados(suites)
     problemas.extend(_lint_notas_especificas(tarefas, congelados))
     problemas.extend(_lint_esclarecimento_por_identificador(tarefas, congelados))
+    problemas.extend(_lint_gabarito_tipado(tarefas, congelados))
     problemas.extend(lint_do_congelamento(tarefas, suites))
 
     if estrito:

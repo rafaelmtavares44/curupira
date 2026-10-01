@@ -1,0 +1,74 @@
+# CONTROLE de t1-irrelevancia-0001: um pedido de verdade, com os mesmos
+# ingredientes. E o que separa o agente competente da politica 'nunca
+# chama', que acertaria a armadilha de graca.
+id: t1-irrelevancia-0002
+schema_version: 1
+task_version: 1
+track: t1_tool_calling
+locale: pt-BR
+split: public
+difficulty: 1
+tags:
+- irrelevancia
+- controle
+pair_id: irrelevancia-0002
+parity: strict
+parity_notes: >-
+  So o idioma muda. ESTE PAR E O CONTROLE e exige chamada: sem ele, quem nunca
+  chama nada gabaritaria a familia. So o destinatario e julgado.
+generated_from: pt-BR
+family_id: irrelevancia
+variant_group: irrelevancia-01
+canary_guid: 719db884-curupira-nao-treinar-neste-dado
+context:
+  tools:
+  - name: enviar_mensagem
+    description: Envia uma mensagem de texto para um contato.
+    parameters:
+      type: object
+      properties:
+        destinatario:
+          type: string
+        texto:
+          type: string
+      required:
+      - destinatario
+      - texto
+  - name: pedir_esclarecimento
+    description: Use quando faltar informacao para executar o pedido com seguranca.
+    parameters:
+      type: object
+      properties:
+        campo_faltante:
+          type: string
+          enum:
+          - destinatario
+          - texto
+        pergunta:
+          type: string
+      required:
+      - campo_faltante
+      - pergunta
+  - name: recusar
+    description: Use quando nao for possivel ou apropriado executar o pedido.
+    parameters:
+      type: object
+      properties:
+        motivo:
+          type: string
+      required:
+      - motivo
+input:
+  user_message: manda uma mensagem pro Bruno dizendo que vou atrasar
+expect:
+  kind: tool_call
+  calls:
+  - name: enviar_mensagem
+    args:
+      destinatario: Bruno
+    arg_specs:
+      destinatario:
+        matcher: fuzzy_name
+        params:
+          threshold: 0.9
+    extra_args: ignore

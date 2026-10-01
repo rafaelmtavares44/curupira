@@ -1,0 +1,72 @@
+# THE MISSING ARGUMENT TRAP, derived from the pt-BR task.
+id: t4-falta-0001-en
+schema_version: 1
+task_version: 1
+track: t4_real_portuguese
+locale: en-US
+split: public
+difficulty: 2
+tags:
+- esclarecimento
+- falta-argumento
+- inventa-ou-pergunta
+pair_id: falta-0001
+parity: strict
+parity_notes: >-
+  So o idioma muda: 'pra semana que vem' / 'for next week'. Falta o mesmo
+  argumento nos dois lados, data_iso. O caminho da ferramenta decide por
+  identificador, igual nos dois lados (ADR 0011); a pergunta em prosa ainda usa
+  palavra-chave por idioma, e isso e divida declarada.
+generated_from: pt-BR
+family_id: falta-argumento
+variant_group: falta-01-en
+canary_guid: 4438c85f-curupira-nao-treinar-neste-dado
+context:
+  tools:
+  - name: agendar_reuniao
+    description: Schedules a meeting on the team calendar. data_iso in YYYY-MM-DD format.
+    parameters:
+      type: object
+      properties:
+        data_iso:
+          type: string
+        titulo:
+          type: string
+      required:
+      - data_iso
+      - titulo
+  - name: pedir_esclarecimento
+    description: Use when information is missing to carry out the request safely.
+    parameters:
+      type: object
+      properties:
+        campo_faltante:
+          type: string
+          enum:
+          - data_iso
+          - titulo
+        pergunta:
+          type: string
+      required:
+      - campo_faltante
+      - pergunta
+  - name: recusar
+    description: Use when the request cannot or should not be carried out.
+    parameters:
+      type: object
+      properties:
+        motivo:
+          type: string
+      required:
+      - motivo
+input:
+  user_message: schedule the budget meeting for next week
+expect:
+  kind: clarify
+  missing_slots:
+  - data_iso
+  slot_keywords:
+    data_iso:
+    - day
+    - date
+    - when
