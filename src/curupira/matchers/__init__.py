@@ -1,12 +1,12 @@
 """Matchers registrados, usados pelo AST checker para comparar argumentos.
 
-Nesta fase os matchers estão **registrados mas não implementados**: o nome existe
-no registro e o lint do dataset já consegue recusar uma tarefa que referencie um
-matcher inexistente, mesmo antes de a comparação funcionar.
+Um matcher é um **nome registrado** que o YAML cita; a lógica vive aqui, testada.
+O lint do dataset recusa tarefa que cite nome não registrado, antes de gastar API.
 
-Isso não é meia-implementação disfarçada. São duas garantias distintas: "este
-nome é conhecido" (agora) e "este nome compara corretamente" (Entrega 2). A
-primeira já tem valor — ela pega erro de digitação no YAML antes de gastar API.
+(Até a Entrega 20 este docstring dizia que os matchers estavam "registrados mas
+não implementados" — verdade na Entrega 1, falso desde a 2. Ficou registrado
+porque é o quinto caso desta base de documentação que envelheceu sem ninguém
+ver.)
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from curupira.matchers.numerico import (
     moeda_normalizada,
     tolerancia_numerica,
 )
-from curupira.matchers.texto import exact_str, fuzzy_name, one_of, por_validador
+from curupira.matchers.texto import contem_todos, exact_str, fuzzy_name, one_of, por_validador
 
 NOMES = (
     "exact_int",
@@ -29,6 +29,7 @@ NOMES = (
     "one_of",
     "fuzzy_name",
     "por_validador",
+    "contem_todos",
 )
 """Inventário declarado dos matchers. O teste confere contra o registro real."""
 
@@ -47,3 +48,4 @@ def registrar_todos() -> None:
     registrar_matcher("one_of", one_of)
     registrar_matcher("fuzzy_name", fuzzy_name)
     registrar_matcher("por_validador", por_validador)
+    registrar_matcher("contem_todos", contem_todos)

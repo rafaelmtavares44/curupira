@@ -43,6 +43,25 @@ Isto não é um limite do benchmark; é o controle experimental dele. O caso
 "ferramenta descrita em inglês com usuário falando português" é uma trilha
 própria, a T1, onde a diferença é o objeto de estudo e não ruído.
 
+**O que esta regra NÃO consegue isolar, e fica declarado.** Com identificadores
+em português, o lado pt-BR é monolíngue (usuário e ferramenta falam a mesma
+língua) e o lado en-US é bilíngue (usuário em inglês, `enviar_convite` em
+português). Isso ajuda o português onde a palavra do pedido casa com o nome da
+ferramenta (`convidar` ↔ `enviar_convite`) e o atrapalha onde a isca casa
+(`mensagem` ↔ `enviar_mensagem`). **A direção líquida não é conhecida.** Medir
+exige um braço de ablação com identificadores em inglês no lado en-US — dívida
+registrada na ADR 0012, não resolvida.
+
+### Acento e registro
+
+- **Texto em português leva acento**, na `description` e na mensagem. Texto sem
+  acento é fenômeno estudado na T4 ("WhatsApp sem acento"); aparecer só no lado
+  pt-BR de um par seria uma assimetria não declarada, que a revisão
+  independente achou nas primeiras 40 tarefas.
+- **O registro é o informal mais comum de cada língua.** "Pra", "pro" e o
+  imperativo coloquial ("manda", "marca") do lado pt-BR não são assimetria: são
+  o jeito normal de pedir em português, como o imperativo neutro é em inglês.
+
 ## Toda tarefa oferece as três ferramentas
 
 A do domínio, mais as duas de abstenção:
@@ -94,6 +113,34 @@ conversão. Quem erra só a armadilha tem o problema que o Curupira existe para
 medir. **Sem o controle, as duas hipóteses se confundem no agregado**, e o
 número publicado seria maior do que o defeito real.
 
+### O controle difere da armadilha **só** no fator testado
+
+É um par mínimo. Se o controle muda o fator testado **e** outra coisa (o nome, a
+magnitude, a convenção de data), ele deixa de separar as hipóteses. A revisão
+independente da Entrega 20 achou quatro controles assim e todos foram refeitos.
+
+O desenho que melhor funcionou: **a resposta certa do controle é o erro típico
+da armadilha.** Na `anafora`, o controle manda para a Ana, que é para quem a
+armadilha engana. Na `hora-12-24`, o controle é "três e quinze da tarde"
+(15:15), que é como a armadilha "quinze pras três da tarde" (14:45) costuma ser
+lida errado. Assim o gabarito difere por construção, e o par continua mínimo.
+
+Quando um único controle não basta para separar duas causas, acrescente uma
+terceira variante em vez de mudar o controle (`ferramenta-em-ingles` tem duas).
+
+### Frases de sistema padronizadas
+
+- **Toda tarefa que move dinheiro** declara no `system_prompt` que o pedido já
+  foi confirmado e que `pedir_esclarecimento` serve só para dado faltante ou
+  ambíguo. Sem isso, pedir confirmação antes de transferir — uso defensável da
+  ferramenta — reprovava como abstenção indevida.
+- **Toda tarefa de esclarecimento** (as duas variantes) instrui a perguntar pela
+  ferramenta. A pergunta em prosa vai ao juiz (ADR 0012); a instrução mantém
+  essa fração pequena.
+- **Data relativa precisa de âncora.** Se o pedido diz "semana que vem", o
+  `system_prompt` diz que dia é hoje — senão a lacuna é também a falta de
+  relógio, e não só o dado que a tarefa quer testar.
+
 ## `family_id` é a unidade de reamostragem
 
 As tarefas de uma família não são observações independentes: quem entende a
@@ -121,6 +168,11 @@ modelo souber o GUID, o dataset vazou e há prova.
 
 Canário duplicado arruína a segunda função: você sabe que vazou, mas não sabe
 qual tarefa. O lint `canario-unico` cobra isso.
+
+**Canário de tarefa publicada não muda**, nem quando a tarefa ainda é rascunho e
+o resto dela muda. O repositório é público: a versão que já foi ao ar pode ter
+sido coletada com aquele GUID, e trocá-lo apagaria a capacidade de detectar
+justamente esse vazamento.
 
 ## Régua: matchers e validadores são nomes registrados
 

@@ -17,7 +17,14 @@ from curupira.matchers.numerico import (
     para_centavos,
     tolerancia_numerica,
 )
-from curupira.matchers.texto import exact_str, fuzzy_name, normalizar, one_of, por_validador
+from curupira.matchers.texto import (
+    contem_todos,
+    exact_str,
+    fuzzy_name,
+    normalizar,
+    one_of,
+    por_validador,
+)
 
 VAZIO: Mapping[str, JsonValue] = {}
 
@@ -241,3 +248,45 @@ def test_one_of_compara_valores_nao_textuais() -> None:
 def test_para_centavos_recusa_decimais_nao_numericos() -> None:
     assert para_centavos("1.2a3") is None
     assert para_centavos("..,,") is None
+
+
+# --------------------------------------------------------------------------
+# one_of sem caixa e contem_todos (Entrega 20)
+# --------------------------------------------------------------------------
+
+
+def test_one_of_diferencia_caixa_por_padrao() -> None:
+    assert not one_of("maria lima", "Maria Lima", {"values": []})
+
+
+def test_one_of_pode_ignorar_caixa() -> None:
+    """Revisão independente: "maria lima" reprovava contra "Maria Lima"."""
+    params: Mapping[str, JsonValue] = {"values": ["Maria"], "case_sensitive": False}
+    assert one_of("maria lima", "Maria Lima", params)
+    assert one_of("MARIA", "Maria Lima", params)
+    assert not one_of("Mariana", "Maria Lima", params)
+
+
+def test_contem_todos_aceita_parafrase_com_o_termo() -> None:
+    params: Mapping[str, JsonValue] = {"termos": ["Ana"]}
+    for texto in ("convidar a Ana pro churrasco", "Convidar ANA", "lembrar de chamar a ana"):
+        assert contem_todos(texto, None, params), texto
+
+
+def test_contem_todos_recusa_texto_sem_o_termo() -> None:
+    """O falso positivo que motivou o matcher: `texto: "comprar pão"` passava."""
+    assert not contem_todos("comprar pão", None, {"termos": ["Ana"]})
+    assert not contem_todos(None, None, {"termos": ["Ana"]})
+
+
+def test_contem_todos_exige_todos_os_termos_e_ignora_acento() -> None:
+    params: Mapping[str, JsonValue] = {"termos": ["João", "sábado"]}
+    assert contem_todos("convidar o joao no sabado", None, params)
+    assert not contem_todos("convidar o joão", None, params)
+
+
+@pytest.mark.parametrize("params", [VAZIO, {"termos": []}, {"termos": ["  "]}, {"termos": "Ana"}])
+def test_contem_todos_sem_termo_estoura(params: Mapping[str, JsonValue]) -> None:
+    """Sem termo, aceitaria qualquer texto: é não julgar disfarçado."""
+    with pytest.raises(ValueError, match="termos"):
+        contem_todos("qualquer coisa", None, params)

@@ -12,8 +12,9 @@ tags:
 pair_id: hora-0002
 parity: strict
 parity_notes: >-
-  Muda o idioma e a convencao correspondente: '16h' em pt-BR, '4 PM' em en-US.
-  ESTE PAR E O CONTROLE: nenhum dos dois lados e ambiguo.
+  So o idioma muda: 'tres e quinze da tarde' / 'quarter past three in the
+  afternoon'. ESTE PAR E O CONTROLE: a mesma conversao de 12 para 24 horas da
+  armadilha nos dois lados, sem a construcao 'quinze pras'.
 generated_from: pt-BR
 family_id: hora-12-24
 variant_group: hora-01-en
@@ -33,7 +34,7 @@ context:
       - hora_hhmm
       - titulo
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -57,17 +58,17 @@ context:
       required:
       - motivo
 input:
-  user_message: schedule the alignment call at 4 PM
+  user_message: set up the sync call for quarter past three in the afternoon
 expect:
   kind: tool_call
   calls:
   - name: marcar_horario
     args:
-      hora_hhmm: '16:00'
+      hora_hhmm: '15:15'
     arg_specs:
       hora_hhmm:
         matcher: one_of
         params:
           values:
-          - '16:00:00'
+          - '15:15:00'
     extra_args: ignore

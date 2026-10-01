@@ -30,7 +30,7 @@ context:
       required:
       - destinatario
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -53,7 +53,7 @@ context:
       required:
       - motivo
 input:
-  user_message: I set up a meeting with Ana and Bruno tomorrow. Send the agenda to Ana.
+  user_message: I'm meeting with Bruno and Ana tomorrow. Send the agenda to Ana.
 expect:
   kind: tool_call
   calls:

@@ -1,4 +1,5 @@
-# CONTROLE de t4-extenso-0001: numero curto por extenso, sem composicao.
+# CONTROLE de t4-extenso-0001: o mesmo valor redondo, sem o 'e cinquenta'.
+# A diferenca para a armadilha e so a cauda.
 id: t4-extenso-0002
 schema_version: 1
 task_version: 1
@@ -12,7 +13,8 @@ tags:
 pair_id: extenso-0002
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'cem reais' / 'one hundred reais'. ESTE PAR E O CONTROLE.
+  So o idioma muda: 'dois mil e quinhentos reais' / 'two thousand five hundred
+  reais'. ESTE PAR E O CONTROLE.
 generated_from: pt-BR
 family_id: numero-por-extenso
 variant_group: extenso-01
@@ -20,7 +22,8 @@ canary_guid: 46f40b0c-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: criar_transferencia
-    description: Cria uma transferencia bancaria. valor_centavos em centavos de real.
+    description: Cria uma transferência bancária para um contato. valor_centavos em centavos
+      de real.
     parameters:
       type: object
       properties:
@@ -32,7 +35,7 @@ context:
       - valor_centavos
       - favorecido
   - name: pedir_esclarecimento
-    description: Use quando faltar informacao para executar o pedido com seguranca.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -47,7 +50,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use quando nao for possivel ou apropriado executar o pedido.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -55,19 +58,30 @@ context:
           type: string
       required:
       - motivo
+  system_prompt: O usuário já está autenticado e confirmou este pedido. Execute diretamente;
+    use pedir_esclarecimento só se um dado faltar ou for ambíguo.
 input:
-  user_message: paga cem reais pro fornecedor Silva
+  user_message: paga dois mil e quinhentos reais pro fornecedor Silva
 expect:
   kind: tool_call
   calls:
   - name: criar_transferencia
     args:
-      valor_centavos: 10000
+      valor_centavos: 250000
+      favorecido: Silva
     arg_specs:
       valor_centavos:
         matcher: exact_int
+      favorecido:
+        matcher: one_of
+        params:
+          values:
+          - fornecedor Silva
+          - supplier Silva
+          - the supplier Silva
+          case_sensitive: false
     extra_args: ignore
   silent_failure_if:
   - arg: valor_centavos
-    equals: 100
+    equals: 2500
     label: esqueceu_de_converter_para_centavos

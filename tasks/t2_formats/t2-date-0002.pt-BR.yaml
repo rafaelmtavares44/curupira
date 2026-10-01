@@ -38,7 +38,7 @@ canary_guid: e3f6c9a2-curupira-nao-treinar-neste-dado
 context:
   tools:
     - name: agendar_reuniao
-      description: Agenda uma reuniao na agenda da equipe.
+      description: Agenda uma reunião no calendário da equipe.
       parameters:
         type: object
         properties:
@@ -49,7 +49,7 @@ context:
     # Ferramentas padrao de abstencao, presentes em TODA tarefa.
     # Tornam a abstencao detectavel por AST, sem juiz e sem lexico de hedge.
     - name: pedir_esclarecimento
-      description: Use quando faltar informacao para executar o pedido com seguranca.
+      description: Use quando faltar informação para executar o pedido com segurança.
       parameters:
         type: object
         properties:
@@ -58,7 +58,7 @@ context:
         required: [campo_faltante, pergunta]
 
     - name: recusar
-      description: Use quando nao for possivel ou apropriado executar o pedido.
+      description: Use quando não for possível ou apropriado executar o pedido.
       parameters:
         type: object
         properties:
@@ -66,7 +66,7 @@ context:
         required: [motivo]
 
 input:
-  user_message: "marca a reuniao de planejamento pro dia 19/08/2026"
+  user_message: "marca a reunião de planejamento pro dia 19/08/2026"
 
 expect:
   kind: tool_call
@@ -74,7 +74,7 @@ expect:
     - name: agendar_reuniao
       args:
         data_iso: "2026-08-19"
-        titulo: "reuniao de planejamento"
+        titulo: "reunião de planejamento"
       arg_specs:
         # REGUA ISO-ONLY, e simetrica de proposito. O argumento se chama
         # `data_iso` e o schema da ferramenta pede ISO: devolver a data na

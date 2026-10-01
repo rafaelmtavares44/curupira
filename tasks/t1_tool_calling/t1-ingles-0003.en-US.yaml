@@ -1,5 +1,5 @@
-# CONTROL for t1-ingles-0001, derived from the pt-BR task.
-id: t1-ingles-0002-en
+# SECOND CONTROL for t1-ingles-0001, derived from the pt-BR task.
+id: t1-ingles-0003-en
 schema_version: 1
 task_version: 1
 track: t1_tool_calling
@@ -9,19 +9,18 @@ difficulty: 1
 tags:
 - ferramenta-em-ingles
 - controle
-pair_id: ingles-0002
+pair_id: ingles-0003
 parity: strict
 parity_notes: >-
   EXCECAO DECLARADA a convencao do tasks/README.md: a ferramenta de negocio e
   nomeada e descrita em INGLES nas duas versoes -- o objeto da familia e o
-  usuario falando portugues com uma ferramenta em ingles. ESTE PAR E UM
-  CONTROLE: 'manda' / 'send', sem falso cognato. ASSIMETRIA DECLARADA: em en-US
-  'send' casa com 'sends' da descricao; em pt-BR 'manda' nao casa com nada.
-  Favorece o en-US.
+  usuario falando portugues com uma ferramenta em ingles. ESTE PAR E O SEGUNDO
+  CONTROLE: 'baixa' / 'download', direcao pull, sem falso cognato. O servidor e
+  outro de proposito, para o gabarito diferir do da armadilha.
 generated_from: pt-BR
 family_id: ferramenta-em-ingles
 variant_group: ingles-01-en
-canary_guid: 04349296-curupira-nao-treinar-neste-dado
+canary_guid: 09db3a30-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: transfer_data
@@ -65,14 +64,14 @@ context:
       required:
       - motivo
 input:
-  user_message: send the data to the backup server
+  user_message: download the data from the production server
 expect:
   kind: tool_call
   calls:
   - name: transfer_data
     args:
-      direction: push
-      server: backup
+      direction: pull
+      server: producao
     arg_specs:
       direction:
         matcher: exact_str
@@ -80,9 +79,10 @@ expect:
         matcher: one_of
         params:
           values:
-          - backup
-          - servidor de backup
-          - backup server
-          - the backup server
+          - produção
+          - servidor de produção
+          - production
+          - production server
+          - the production server
           case_sensitive: false
     extra_args: ignore

@@ -19,9 +19,9 @@ Camada por tipo de espera, da menos para a mais subjetiva:
 
 `clarify` é o único que pode escapar para o juiz, e escapa o menos possível:
 chamar ferramenta de negócio é falha **estrutural**; chamar `pedir_esclarecimento`
-decide **por identificador** (ADR 0011); só a pergunta em prosa cai no casamento
-de palavra-chave, e o juiz fica com o resíduo dela. A fração que caiu ali é
-reportada.
+decide **por identificador** (ADR 0011); a pergunta em prosa vai inteira para o
+juiz, porque decidi-la exigiria palavra-chave por idioma (ADR 0012). A fração que
+caiu ali é reportada.
 """
 
 from __future__ import annotations
@@ -81,13 +81,46 @@ def _de_negocio(chamadas: tuple[ChamadaObservada, ...]) -> tuple[ChamadaObservad
     return tuple(c for c in chamadas if c.name not in FERRAMENTAS_DE_ABSTENCAO)
 
 
-def pontuar_tool_call(espera: EsperaChamadaDeFerramenta, resposta: RespostaCrua) -> Veredicto:
-    """T1, T2, T6: delega ao AST checker.
+def _agiu_sem_esperar(resposta: RespostaCrua) -> Veredicto | None:
+    """Reprova quem se absteve e agiu **na mesma resposta**.
 
-    As chamadas de abstenção são **removidas antes** de comparar. Sem isso, um
-    agente que pergunta e depois executa corretamente seria reprovado por
-    "chamada a mais" — e perguntar antes de agir é a virtude que o T6 quer medir,
-    não um defeito.
+    O harness da v0.1 executa um turno só. Uma resposta com
+    `pedir_esclarecimento` (ou `recusar`) **e** uma chamada de negócio não é
+    "perguntou e depois executou": as duas chamadas são simultâneas, e o agente
+    executou sem esperar a resposta da própria pergunta. Numa transferência,
+    é perguntar "confirma?" e mandar o dinheiro antes de ouvir o sim.
+
+    Até a Entrega 20 as chamadas de abstenção eram simplesmente removidas antes
+    de comparar, e esse caso **passava** — com a justificativa de "perguntar e
+    depois executar", que só existe num harness multi-turno. Quando ele existir,
+    esta regra é revista junto.
+
+    Returns:
+        O veredicto de falha, ou `None` quando a resposta não mistura as duas coisas.
+    """
+    abstencoes = sorted({c.name for c in resposta.tool_calls if c.name in FERRAMENTAS_DE_ABSTENCAO})
+    acoes = sorted({c.name for c in _de_negocio(resposta.tool_calls)})
+    if not abstencoes or not acoes:
+        return None
+    return Veredicto(
+        desfecho=Desfecho.FALHOU,
+        camada=CamadaDePontuacao.AST,
+        motivo=(
+            f"chamou {abstencoes} e {acoes} na mesma resposta: num harness de turno "
+            "unico, isso e agir sem esperar a resposta da propria pergunta"
+        ),
+    )
+
+
+def pontuar_tool_call(espera: EsperaChamadaDeFerramenta, resposta: RespostaCrua) -> Veredicto:
+    """T1, T2: delega ao AST checker.
+
+    Duas regras antes da comparação:
+
+    - abster-se **e** agir na mesma resposta reprova (`_agiu_sem_esperar`);
+    - abster-se **sem** agir chega ao checker com zero chamadas de negócio e
+      reprova por contagem — é a abstenção indevida, que o `silent_failure`
+      rotula como tal.
 
     Args:
         espera: o bloco `expect` da tarefa.
@@ -96,6 +129,8 @@ def pontuar_tool_call(espera: EsperaChamadaDeFerramenta, resposta: RespostaCrua)
     Returns:
         O veredicto, sempre na camada AST.
     """
+    if (mista := _agiu_sem_esperar(resposta)) is not None:
+        return mista
     veredicto = checar(espera, _de_negocio(resposta.tool_calls))
     return Veredicto(
         desfecho=Desfecho.PASSOU if veredicto.passou else Desfecho.FALHOU,
@@ -208,8 +243,11 @@ def pontuar_extraction(espera: EsperaExtracao, resposta: RespostaCrua) -> Veredi
         resposta: a resposta crua do modelo.
 
     Returns:
-        O veredicto, sempre na camada VALIDADOR.
+        O veredicto na camada VALIDADOR, ou na AST quando o agente se absteve e
+        agiu na mesma resposta (`_agiu_sem_esperar`).
     """
+    if (mista := _agiu_sem_esperar(resposta)) is not None:
+        return mista
     camada = CamadaDePontuacao.VALIDADOR
     negocio = normalizar_chamadas(_de_negocio(resposta.tool_calls))
     if not negocio:
@@ -279,9 +317,8 @@ def pontuar_clarify(espera: EsperaEsclarecimento, resposta: RespostaCrua) -> Ver
        Os `campo_faltante` pedidos têm de cobrir os `missing_slots`, por
        igualdade exata. Nada de léxico, nada de juiz — e aqui isso é verdade no
        código, não só no docstring.
-    3. Não chamou a ferramenta: procura os slots no **texto**, por palavra-chave.
-       Cobriu todos e perguntou → `ABSTEVE`, camada VALIDADOR. Perguntou sem
-       cobrir → resíduo do juiz. Nem perguntou → falha.
+    3. Não chamou a ferramenta: perguntou em prosa → **sempre** juiz
+       (`PENDENTE_DE_JUIZ`, fora do denominador). Nem perguntou → falha.
 
     Por que o caminho 2 é por identificador (ADR 0011)
     ---------------------------------------------------
@@ -297,9 +334,10 @@ def pontuar_clarify(espera: EsperaEsclarecimento, resposta: RespostaCrua) -> Ver
     nas duas versões do par. A régua do caminho 2 passa a ser a mesma dos dois
     lados por construção.
 
-    O caminho 3 continua lexical, e isso está declarado: é a dívida que sobra.
-    A fração decidida por ele aparece no relatório como `ABSTEVE` e
-    `PENDENTE_DE_JUIZ`, separada do `PASSOU`.
+    O caminho 3 já foi lexical, e era pior do que parecia: a prosa que casava a
+    palavra-chave saía como `ABSTEVE`, que **fica no denominador e não é
+    acerto**, e a que não casava saía do denominador. Acertar a palavra-chave
+    piorava a nota. Agora toda prosa vai ao juiz e a fração é reportada (ADR 0012).
 
     Args:
         espera: o bloco `expect` da tarefa.
@@ -335,35 +373,33 @@ def pontuar_clarify(espera: EsperaEsclarecimento, resposta: RespostaCrua) -> Ver
             ),
         )
 
-    alvo = normalizar(resposta.text or "", ignorar_acentos=True).casefold()
-    faltando = [
-        slot
-        for slot in espera.missing_slots
-        if not _slot_coberto(slot, espera.slot_keywords.get(slot, ()), alvo)
-    ]
-    # A interrogacao e exigida no caminho da prosa, e nao e formalidade: sem
-    # ela, "valor transferido com sucesso" casaria a palavra-chave "valor" e
-    # passaria como se tivesse perguntado. Mencionar o slot nao e perguntar
-    # por ele.
-    interrogou = "?" in (resposta.text or "")
-    if not interrogou:
+    # Caminho da prosa. A interrogacao e exigida, e nao e formalidade: sem ela,
+    # "valor transferido com sucesso" contaria como pergunta. Mencionar o slot
+    # nao e perguntar por ele. O "?" e pontuacao, nao lexico de idioma.
+    if "?" not in (resposta.text or ""):
         return Veredicto(
             desfecho=Desfecho.FALHOU,
             camada=CamadaDePontuacao.AST,
-            motivo=f"nao pediu esclarecimento e nao perguntou nada sobre {faltando}",
+            motivo="nao pediu esclarecimento e nao perguntou nada",
         )
-    if not faltando:
-        return Veredicto(
-            desfecho=Desfecho.ABSTEVE,
-            camada=CamadaDePontuacao.VALIDADOR,
-            motivo=f"perguntou em prosa pelos {len(espera.missing_slots)} slot(s) faltante(s)",
-        )
+
+    # Pergunta em prosa vai SEMPRE para o juiz. Decidir aqui exigiria uma lista
+    # de palavras-chave escrita a mao em cada idioma, e a cobertura dela nao e
+    # igual entre os idiomas -- e chute com vies, que e o que o cabecalho deste
+    # modulo proibe. As palavras-chave so entram no motivo, como pista para quem
+    # anotar (ADR 0012).
+    alvo = normalizar(resposta.text or "", ignorar_acentos=True).casefold()
+    cobertos = [
+        slot
+        for slot in espera.missing_slots
+        if _slot_coberto(slot, espera.slot_keywords.get(slot, ()), alvo)
+    ]
     return Veredicto(
         desfecho=Desfecho.PENDENTE_DE_JUIZ,
         camada=CamadaDePontuacao.JUIZ,
         motivo=(
-            f"o agente perguntou em prosa, mas nenhuma palavra declarada cobriu {faltando}. "
-            "So anotacao humana decide se a pergunta era a certa."
+            f"perguntou em prosa; pista lexical: cobriu {cobertos} de "
+            f"{sorted(espera.missing_slots)}. So anotacao humana decide."
         ),
     )
 

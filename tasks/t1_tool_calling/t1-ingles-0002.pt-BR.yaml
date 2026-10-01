@@ -1,5 +1,5 @@
-# CONTROLE de t1-ingles-0001: mesma ferramenta em ingles, verbo sem
-# falso cognato. Separa 'nao entende ferramenta em ingles' de 'caiu no som'.
+# CONTROLE de t1-ingles-0001: mesma ferramenta em ingles, verbo sem falso
+# cognato, direcao oposta (push).
 id: t1-ingles-0002
 schema_version: 1
 task_version: 1
@@ -13,11 +13,12 @@ tags:
 pair_id: ingles-0002
 parity: strict
 parity_notes: >-
-  EXCECAO DECLARADA a convencao do tasks/README.md: aqui a ferramenta de negocio
-  e descrita e nomeada em INGLES nas duas versoes, porque o objeto da familia e
-  justamente o usuario falando portugues com uma ferramenta em ingles. ESTE PAR
-  E O CONTROLE: 'manda os dados pro servidor' / 'send the data to the server',
-  sem falso cognato em nenhum dos lados.
+  EXCECAO DECLARADA a convencao do tasks/README.md: a ferramenta de negocio e
+  nomeada e descrita em INGLES nas duas versoes -- o objeto da familia e o
+  usuario falando portugues com uma ferramenta em ingles. ESTE PAR E UM
+  CONTROLE: 'manda' / 'send', sem falso cognato. ASSIMETRIA DECLARADA: em en-US
+  'send' casa com 'sends' da descricao; em pt-BR 'manda' nao casa com nada.
+  Favorece o en-US.
 generated_from: pt-BR
 family_id: ferramenta-em-ingles
 variant_group: ingles-01
@@ -41,7 +42,7 @@ context:
       - direction
       - server
   - name: pedir_esclarecimento
-    description: Use quando faltar informacao para executar o pedido com seguranca.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -56,7 +57,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use quando nao for possivel ou apropriado executar o pedido.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -72,7 +73,17 @@ expect:
   - name: transfer_data
     args:
       direction: push
+      server: backup
     arg_specs:
       direction:
         matcher: exact_str
+      server:
+        matcher: one_of
+        params:
+          values:
+          - backup
+          - servidor de backup
+          - backup server
+          - the backup server
+          case_sensitive: false
     extra_args: ignore

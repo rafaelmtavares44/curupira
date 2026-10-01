@@ -12,7 +12,8 @@ tags:
 pair_id: extenso-0002
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'cem reais' / 'one hundred reais'. ESTE PAR E O CONTROLE.
+  So o idioma muda: 'dois mil e quinhentos reais' / 'two thousand five hundred
+  reais'. ESTE PAR E O CONTROLE.
 generated_from: pt-BR
 family_id: numero-por-extenso
 variant_group: extenso-01-en
@@ -20,7 +21,8 @@ canary_guid: e6ebbace-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: criar_transferencia
-    description: Creates a bank transfer. valor_centavos in cents of Brazilian real.
+    description: Creates a bank transfer to a contact. valor_centavos in cents of Brazilian
+      real.
     parameters:
       type: object
       properties:
@@ -32,7 +34,7 @@ context:
       - valor_centavos
       - favorecido
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -55,19 +57,30 @@ context:
           type: string
       required:
       - motivo
+  system_prompt: The user is already authenticated and has confirmed this request. Carry it
+    out directly; use pedir_esclarecimento only if information is missing or ambiguous.
 input:
-  user_message: pay one hundred reais to supplier Silva
+  user_message: pay two thousand five hundred reais to the supplier Silva
 expect:
   kind: tool_call
   calls:
   - name: criar_transferencia
     args:
-      valor_centavos: 10000
+      valor_centavos: 250000
+      favorecido: Silva
     arg_specs:
       valor_centavos:
         matcher: exact_int
+      favorecido:
+        matcher: one_of
+        params:
+          values:
+          - fornecedor Silva
+          - supplier Silva
+          - the supplier Silva
+          case_sensitive: false
     extra_args: ignore
   silent_failure_if:
   - arg: valor_centavos
-    equals: 100
+    equals: 2500
     label: esqueceu_de_converter_para_centavos

@@ -1,5 +1,7 @@
-# ARMADILHA DO 'DA TARDE'. '2 da tarde' sao 14:00. Quem pega so o numero
-# marca 02:00 -- de madrugada, sem nenhum sinal de que errou.
+# ARMADILHA DO 'QUINZE PRAS TRES DA TARDE'. Sao 14:45. Dois erros tipicos:
+# ler 'quinze pras tres' como 'tres e quinze' (15:15) e ignorar 'da tarde'
+# (02:45). A primeira versao ('2 da tarde') era fraca demais -- quase
+# ninguem ignora 'da tarde'. Proposta da revisao independente.
 id: t2-hora-0001
 schema_version: 1
 task_version: 1
@@ -9,15 +11,15 @@ split: public
 difficulty: 2
 tags:
 - hora
+- quinze-pras
 - convencao-12-24
 - propenso-a-falha-silenciosa
 pair_id: hora-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'as 2 da tarde' / 'at 2 in the afternoon'. Mesmo gabarito,
-  14:00, e o mesmo erro tipico nos dois lados, 02:00. FAMILIA DECLARADAMENTE
-  FRACA: e mais compreensao de texto do que formato brasileiro. Entrou para o
-  Delta passar de 10 familias (ADR 0011).
+  So o idioma muda: 'quinze pras tres da tarde' / 'quarter to three in the
+  afternoon'. Mesmo gabarito, 14:45, e os mesmos erros tipicos nos dois lados.
+  'Pras' e contracao coloquial; o ingles usa o registro coloquial equivalente.
 generated_from: pt-BR
 family_id: hora-12-24
 variant_group: hora-01
@@ -25,7 +27,7 @@ canary_guid: 0b69f2b2-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: marcar_horario
-    description: Marca um horario na agenda. hora_hhmm no formato HH:MM, 24 horas.
+    description: Marca um horário na agenda. hora_hhmm no formato HH:MM, 24 horas.
     parameters:
       type: object
       properties:
@@ -37,7 +39,7 @@ context:
       - hora_hhmm
       - titulo
   - name: pedir_esclarecimento
-    description: Use quando faltar informacao para executar o pedido com seguranca.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -52,7 +54,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use quando nao for possivel ou apropriado executar o pedido.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -61,24 +63,27 @@ context:
       required:
       - motivo
 input:
-  user_message: marca a call de alinhamento às 2 da tarde
+  user_message: marca a call de alinhamento às quinze pras três da tarde
 expect:
   kind: tool_call
   calls:
   - name: marcar_horario
     args:
-      hora_hhmm: '14:00'
+      hora_hhmm: '14:45'
     arg_specs:
       hora_hhmm:
         matcher: one_of
         params:
           values:
-          - '14:00:00'
+          - '14:45:00'
     extra_args: ignore
   silent_failure_if:
   - arg: hora_hhmm
-    equals: 02:00
+    equals: '15:15'
+    label: leu_quinze_pras_como_e_quinze
+  - arg: hora_hhmm
+    equals: 02:45
     label: ignorou_da_tarde
   - arg: hora_hhmm
-    equals: '2:00'
-    label: ignorou_da_tarde
+    equals: 03:15
+    label: errou_os_dois

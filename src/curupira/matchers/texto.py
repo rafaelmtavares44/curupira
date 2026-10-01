@@ -61,7 +61,8 @@ def one_of(observado: JsonValue, esperado: JsonValue, params: Mapping[str, JsonV
     Args:
         observado: o valor que o agente enviou.
         esperado: o valor de referência, sempre aceito.
-        params: `values`, a lista de valores aceitáveis.
+        params: `values`, a lista de valores aceitáveis; `case_sensitive`,
+            padrão verdadeiro, como no `exact_str`.
 
     Returns:
         `True` se o observado está no conjunto.
@@ -69,13 +70,55 @@ def one_of(observado: JsonValue, esperado: JsonValue, params: Mapping[str, JsonV
     bruto = params.get("values")
     aceitos: list[JsonValue] = list(bruto) if isinstance(bruto, list) else []
     aceitos.append(esperado)
+    ignorar_caixa = params.get("case_sensitive") is False
     for aceito in aceitos:
         if isinstance(observado, str) and isinstance(aceito, str):
-            if normalizar(observado) == normalizar(aceito):
+            a, b = normalizar(observado), normalizar(aceito)
+            if a == b or (ignorar_caixa and a.casefold() == b.casefold()):
                 return True
         elif observado == aceito:
             return True
     return False
+
+
+def contem_todos(
+    observado: JsonValue, esperado: JsonValue, params: Mapping[str, JsonValue]
+) -> bool:
+    """Texto livre que precisa mencionar certos termos, sem exigir a paráfrase.
+
+    Existe para argumento de texto livre que importa mas varia entre respostas
+    corretas — o texto de um lembrete, por exemplo. `exact_str` reprovaria
+    paráfrase; não julgar deixaria passar `texto: "comprar pão"` num lembrete
+    sobre convidar a Ana. Aqui basta que cada termo apareça, ignorando acento e
+    caixa.
+
+    Use termos que sejam iguais nos dois idiomas do par — nomes próprios, em
+    geral. Um termo traduzido seria régua diferente por idioma, e o
+    `par-mesma-regua` existe para recusar isso.
+
+    Args:
+        observado: o valor que o agente enviou.
+        esperado: o valor de referência; não é usado na comparação.
+        params: `termos`, a lista não vazia de termos exigidos.
+
+    Returns:
+        `True` se o observado contém todos os termos.
+
+    Raises:
+        ValueError: se `termos` faltar ou vier vazio — sem termo, o matcher
+            aceitaria qualquer texto, e isso é não julgar disfarçado.
+    """
+    del esperado
+    bruto = params.get("termos")
+    termos = (
+        [t for t in bruto if isinstance(t, str) and t.strip()] if isinstance(bruto, list) else []
+    )
+    if not termos:
+        raise ValueError("o matcher 'contem_todos' exige 'termos' com ao menos um termo")
+    if not isinstance(observado, str):
+        return False
+    alvo = normalizar(observado, ignorar_acentos=True).casefold()
+    return all(normalizar(t, ignorar_acentos=True).casefold() in alvo for t in termos)
 
 
 def similaridade(a: str, b: str) -> float:

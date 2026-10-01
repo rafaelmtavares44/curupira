@@ -1,5 +1,6 @@
-# CONTROLE de t2-hora-0001: horario sem ambiguidade nenhuma -- '16h' em
-# portugues, '4 PM' em ingles. Gabarito diferente da armadilha de proposito.
+# CONTROLE de t2-hora-0001: 'tres e quinze da tarde', sem o 'pras'. O
+# gabarito, 15:15, e justamente o erro tipico da armadilha: a diferenca
+# entre as duas e SO a construcao 'quinze pras'. O 'da tarde' esta nas duas.
 id: t2-hora-0002
 schema_version: 1
 task_version: 1
@@ -13,8 +14,9 @@ tags:
 pair_id: hora-0002
 parity: strict
 parity_notes: >-
-  Muda o idioma e a convencao correspondente: '16h' em pt-BR, '4 PM' em en-US.
-  ESTE PAR E O CONTROLE: nenhum dos dois lados e ambiguo.
+  So o idioma muda: 'tres e quinze da tarde' / 'quarter past three in the
+  afternoon'. ESTE PAR E O CONTROLE: a mesma conversao de 12 para 24 horas da
+  armadilha nos dois lados, sem a construcao 'quinze pras'.
 generated_from: pt-BR
 family_id: hora-12-24
 variant_group: hora-01
@@ -22,7 +24,7 @@ canary_guid: 448c6465-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: marcar_horario
-    description: Marca um horario na agenda. hora_hhmm no formato HH:MM, 24 horas.
+    description: Marca um horário na agenda. hora_hhmm no formato HH:MM, 24 horas.
     parameters:
       type: object
       properties:
@@ -34,7 +36,7 @@ context:
       - hora_hhmm
       - titulo
   - name: pedir_esclarecimento
-    description: Use quando faltar informacao para executar o pedido com seguranca.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -49,7 +51,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use quando nao for possivel ou apropriado executar o pedido.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -58,17 +60,17 @@ context:
       required:
       - motivo
 input:
-  user_message: marca a call de alinhamento às 16h
+  user_message: marca a call de alinhamento às três e quinze da tarde
 expect:
   kind: tool_call
   calls:
   - name: marcar_horario
     args:
-      hora_hhmm: '16:00'
+      hora_hhmm: '15:15'
     arg_specs:
       hora_hhmm:
         matcher: one_of
         params:
           values:
-          - '16:00:00'
+          - '15:15:00'
     extra_args: ignore

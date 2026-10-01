@@ -12,9 +12,11 @@ tags:
 pair_id: escolha-0002
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'convida a Ana pro churrasco' em pt-BR, 'invite Ana to the
-  barbecue' em en-US. ESTE PAR E O CONTROLE: o pedido coincide com a palavra da
-  ferramenta, sem isca. Julga-se a ferramenta e o convidado.
+  So o idioma muda. ESTE PAR E O CONTROLE: o pedido coincide com a palavra da
+  ferramenta, sem isca. Julga-se a ferramenta e o convidado. Os identificadores
+  ficam em portugues nos dois lados (tasks/README.md), entao em pt-BR a isca
+  TAMBEM casa com o nome da ferramenta (convidar ~ enviar_convite), assim como a
+  resposta certa (lembra ~ criar_lembrete). O efeito liquido nao e medido.
 generated_from: pt-BR
 family_id: escolha-de-ferramenta
 variant_group: escolha-01-en
@@ -43,7 +45,7 @@ context:
       - convidado
       - evento
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:

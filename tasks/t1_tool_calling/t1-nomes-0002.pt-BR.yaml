@@ -1,5 +1,6 @@
-# CONTROLE de t1-nomes-0001: tres nomes simples. Quem erra este nao tem
-# problema com nome composto -- tem problema com chamadas paralelas.
+# CONTROLE de t1-nomes-0001: tres nomes simples, tambem sem virgulas.
+# Quem erra este nao tem problema com nome composto -- tem problema com
+# chamadas paralelas.
 id: t1-nomes-0002
 schema_version: 1
 task_version: 1
@@ -13,8 +14,8 @@ tags:
 pair_id: nomes-0002
 parity: strict
 parity_notes: >-
-  So o idioma muda; mesmos nomes nos dois lados. ESTE PAR E O CONTROLE: tres
-  nomes simples, nenhum composto.
+  So o idioma muda; mesmos nomes, sem virgulas nos dois lados. ESTE PAR E O
+  CONTROLE: tres nomes simples.
 generated_from: pt-BR
 family_id: nomes-compostos
 variant_group: nomes-01
@@ -22,7 +23,7 @@ canary_guid: 286fafc6-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: enviar_convite
-    description: Envia um convite para um evento.
+    description: Envia um convite para UMA pessoa. Para várias, chame uma vez por pessoa.
     parameters:
       type: object
       properties:
@@ -34,7 +35,7 @@ context:
       - convidado
       - evento
   - name: pedir_esclarecimento
-    description: Use quando faltar informacao para executar o pedido com seguranca.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -49,7 +50,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use quando nao for possivel ou apropriado executar o pedido.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -58,7 +59,7 @@ context:
       required:
       - motivo
 input:
-  user_message: manda o convite da reunião de sexta pra Ana, Bruno e Carla
+  user_message: manda o convite da reunião de sexta pra Ana Bruno e Carla
 expect:
   kind: tool_call
   calls:

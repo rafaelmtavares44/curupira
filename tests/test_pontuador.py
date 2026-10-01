@@ -76,16 +76,32 @@ def test_tool_call_reprova_o_erro_de_mil_vezes() -> None:
     assert veredicto.desfecho is Desfecho.FALHOU
 
 
-def test_perguntar_antes_de_agir_nao_reprova() -> None:
-    """Perguntar e depois executar certo é a virtude que a T6 quer medir.
+def test_perguntar_e_executar_na_mesma_resposta_reprova() -> None:
+    """Em turno único, "confirma?" e a transferência saem juntas.
 
-    Sem filtrar as chamadas de abstenção antes de comparar, o AST checker
-    reprovaria isso por "chamada a mais" — punindo exatamente o comportamento
-    que o benchmark deveria premiar.
+    O agente mandou o dinheiro sem esperar a resposta da própria pergunta.
+    Até a Entrega 20 isso PASSAVA, com a justificativa de "perguntar e depois
+    executar" — que só existe num harness multi-turno (ADR 0012).
     """
     tarefa = Tarefa.model_validate(tarefa_bruta())
     resposta = RespostaCrua(tool_calls=(PERGUNTOU, _transferiu()))
-    assert pontuar(tarefa, resposta).desfecho is Desfecho.PASSOU
+    veredicto = pontuar(tarefa, resposta)
+    assert veredicto.desfecho is Desfecho.FALHOU
+    assert "mesma resposta" in veredicto.motivo
+
+
+def test_recusar_e_executar_na_mesma_resposta_reprova() -> None:
+    tarefa = Tarefa.model_validate(tarefa_bruta())
+    recusou = ChamadaObservada(name="recusar", args={"motivo": "nao posso"})
+    resposta = RespostaCrua(tool_calls=(recusou, _transferiu()))
+    assert pontuar(tarefa, resposta).desfecho is Desfecho.FALHOU
+
+
+def test_so_perguntar_numa_tarefa_de_acao_reprova_por_contagem() -> None:
+    """Abstenção indevida: nada a perguntar, e o agente não agiu."""
+    tarefa = Tarefa.model_validate(tarefa_bruta())
+    veredicto = pontuar(tarefa, RespostaCrua(tool_calls=(PERGUNTOU,)))
+    assert veredicto.desfecho is Desfecho.FALHOU
 
 
 # --------------------------------------------------------------------------
@@ -238,7 +254,8 @@ def test_extraction_recusa_valores_divergentes() -> None:
     assert "dois valores diferentes" in veredicto.motivo
 
 
-def test_extraction_ignora_chamadas_de_abstencao() -> None:
+def test_extraction_reprova_quem_pergunta_e_registra_junto() -> None:
+    """Mesma regra da tool_call: em turno único, perguntar e agir junto reprova."""
     resposta = RespostaCrua(
         tool_calls=(
             PERGUNTOU,
@@ -247,7 +264,9 @@ def test_extraction_ignora_chamadas_de_abstencao() -> None:
             ),
         )
     )
-    assert pontuar_extraction(_extracao(), resposta).desfecho is Desfecho.PASSOU
+    veredicto = pontuar_extraction(_extracao(), resposta)
+    assert veredicto.desfecho is Desfecho.FALHOU
+    assert veredicto.camada is CamadaDePontuacao.AST
 
 
 # --------------------------------------------------------------------------
@@ -354,10 +373,17 @@ def test_recusar_nao_e_pedir_esclarecimento() -> None:
     assert pontuar_clarify(_clarify(), resposta).desfecho is Desfecho.FALHOU
 
 
-def test_clarify_passa_por_palavra_chave_no_texto() -> None:
+def test_pergunta_em_prosa_que_casa_a_palavra_chave_vai_ao_juiz() -> None:
+    """A régua lexical deixou de decidir; ela só deixa uma pista no motivo.
+
+    Antes isto saía `ABSTEVE` — que fica no denominador e não conta como acerto
+    —, enquanto a prosa que NÃO casava saía do denominador. Acertar a
+    palavra-chave piorava a nota (ADR 0012).
+    """
     veredicto = pontuar_clarify(_clarify(), RespostaCrua(text="Para quem devo transferir?"))
-    assert veredicto.desfecho is Desfecho.ABSTEVE
-    assert veredicto.camada is CamadaDePontuacao.VALIDADOR
+    assert veredicto.desfecho is Desfecho.PENDENTE_DE_JUIZ
+    assert veredicto.camada is CamadaDePontuacao.JUIZ
+    assert "cobriu ['favorecido']" in veredicto.motivo
 
 
 def test_clarify_sem_palavra_declarada_vai_para_o_juiz() -> None:
@@ -373,11 +399,13 @@ def test_clarify_reprova_quem_nao_perguntou_nada() -> None:
     assert veredicto.camada is CamadaDePontuacao.AST
 
 
-def test_clarify_casa_pelo_nome_do_slot_sem_keywords() -> None:
+def test_prosa_nunca_sai_como_absteve_nem_passou() -> None:
+    """Nenhuma pergunta em prosa é decidida por léxico, em idioma nenhum."""
     espera = _clarify(slot_keywords={})
-    assert pontuar_clarify(espera, RespostaCrua(text="qual o favorecido?")).desfecho is (
-        Desfecho.ABSTEVE
-    )
+    for texto in ("qual o favorecido?", "who is the payee?", "Bom dia! Qual o titulo?"):
+        assert pontuar_clarify(espera, RespostaCrua(text=texto)).desfecho is (
+            Desfecho.PENDENTE_DE_JUIZ
+        ), texto
 
 
 def test_clarify_exige_todos_os_slots() -> None:
@@ -386,11 +414,10 @@ def test_clarify_exige_todos_os_slots() -> None:
     assert veredicto.desfecho is Desfecho.PENDENTE_DE_JUIZ
 
 
-def test_clarify_ignora_acento_na_palavra_chave() -> None:
+def test_a_pista_lexical_ignora_acento() -> None:
     espera = _clarify(slot_keywords={"favorecido": ("destinatário",)})
-    assert pontuar_clarify(espera, RespostaCrua(text="qual o destinatario?")).desfecho is (
-        Desfecho.ABSTEVE
-    )
+    veredicto = pontuar_clarify(espera, RespostaCrua(text="qual o destinatario?"))
+    assert "cobriu ['favorecido']" in veredicto.motivo
 
 
 # --------------------------------------------------------------------------

@@ -12,9 +12,9 @@ tags:
 pair_id: falta-0002
 parity: strict
 parity_notes: >-
-  Muda o idioma e a convencao de data: '25/11/2026' / '11/25/2026', nao ambigua
-  nos dois lados. ESTE PAR E O CONTROLE e espera chamada, nao pergunta. So a
-  data e julgada.
+  So o idioma muda: 'pra quarta da semana que vem' / 'for Wednesday next week'.
+  Com hoje = segunda, 16/11/2026, a resposta e 2026-11-25 nos dois lados. ESTE
+  PAR E O CONTROLE e espera chamada.
 generated_from: pt-BR
 family_id: falta-argumento
 variant_group: falta-01-en
@@ -34,7 +34,7 @@ context:
       - data_iso
       - titulo
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -57,8 +57,10 @@ context:
           type: string
       required:
       - motivo
+  system_prompt: Today is Monday, 11/16/2026. To ask the user anything, use the pedir_esclarecimento
+    tool.
 input:
-  user_message: schedule the budget meeting for 11/25/2026
+  user_message: schedule the budget meeting for Wednesday next week
 expect:
   kind: tool_call
   calls:

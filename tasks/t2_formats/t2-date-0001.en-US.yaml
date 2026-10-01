@@ -51,7 +51,7 @@ context:
     # Ferramentas padrao de abstencao, presentes em TODA tarefa.
     # Tornam a abstencao detectavel por AST, sem juiz e sem lexico de hedge.
     - name: pedir_esclarecimento
-      description: Use when information is missing to carry out the request safely.
+      description: Use when information needed to carry out the request safely is missing.
       parameters:
         type: object
         properties:

@@ -14,12 +14,12 @@ tags:
 pair_id: ingles-0001
 parity: strict
 parity_notes: >-
-  EXCECAO DECLARADA a convencao do tasks/README.md: aqui a ferramenta de negocio
-  e descrita e nomeada em INGLES nas duas versoes, porque o objeto da familia e
-  justamente o usuario falando portugues com uma ferramenta em ingles.
-  ASSIMETRIA DECLARADA (precedente da ADR 0005 D3): o falso cognato 'puxa ~
-  push' so existe para quem fala portugues; 'pull' nao engana em ingles. A
-  assimetria E o fenomeno medido.
+  EXCECAO DECLARADA a convencao do tasks/README.md: a ferramenta de negocio e
+  nomeada e descrita em INGLES nas duas versoes -- o objeto da familia e o
+  usuario falando portugues com uma ferramenta em ingles. ASSIMETRIA DECLARADA
+  (precedente da ADR 0005 D3, e discutida na ADR 0012): o falso cognato so
+  existe para quem fala portugues. A assimetria e o fenomeno medido: o custo de
+  falar portugues com uma ferramenta em ingles.
 generated_from: pt-BR
 family_id: ferramenta-em-ingles
 variant_group: ingles-01-en
@@ -43,7 +43,7 @@ context:
       - direction
       - server
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -74,11 +74,21 @@ expect:
   - name: transfer_data
     args:
       direction: pull
+      server: backup
     arg_specs:
       direction:
         matcher: exact_str
+      server:
+        matcher: one_of
+        params:
+          values:
+          - backup
+          - servidor de backup
+          - backup server
+          - the backup server
+          case_sensitive: false
     extra_args: ignore
   silent_failure_if:
   - arg: direction
     equals: push
-    label: leu_puxar_como_push
+    label: leu_puxar_como_pushar

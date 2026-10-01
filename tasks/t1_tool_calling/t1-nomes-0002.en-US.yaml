@@ -12,8 +12,8 @@ tags:
 pair_id: nomes-0002
 parity: strict
 parity_notes: >-
-  So o idioma muda; mesmos nomes nos dois lados. ESTE PAR E O CONTROLE: tres
-  nomes simples, nenhum composto.
+  So o idioma muda; mesmos nomes, sem virgulas nos dois lados. ESTE PAR E O
+  CONTROLE: tres nomes simples.
 generated_from: pt-BR
 family_id: nomes-compostos
 variant_group: nomes-01-en
@@ -21,7 +21,7 @@ canary_guid: 42cc5ab8-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: enviar_convite
-    description: Sends an invitation to an event.
+    description: Sends an invitation to ONE person. For several, call once per person.
     parameters:
       type: object
       properties:
@@ -33,7 +33,7 @@ context:
       - convidado
       - evento
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -57,7 +57,7 @@ context:
       required:
       - motivo
 input:
-  user_message: send the Friday meeting invite to Ana, Bruno and Carla
+  user_message: send the Friday meeting invite to Ana Bruno and Carla
 expect:
   kind: tool_call
   calls:

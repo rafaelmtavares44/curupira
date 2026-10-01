@@ -13,7 +13,8 @@ pair_id: irrelevancia-0002
 parity: strict
 parity_notes: >-
   So o idioma muda. ESTE PAR E O CONTROLE e exige chamada: sem ele, quem nunca
-  chama nada gabaritaria a familia. So o destinatario e julgado.
+  chama nada gabaritaria a familia. So o destinatario e julgado: julgar o texto
+  exigiria parafrase por idioma.
 generated_from: pt-BR
 family_id: irrelevancia
 variant_group: irrelevancia-01-en
@@ -33,7 +34,7 @@ context:
       - destinatario
       - texto
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:

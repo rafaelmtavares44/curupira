@@ -1,5 +1,5 @@
-# THE COMPOUND NAME TRAP, derived from the pt-BR task. Same names on both
-# sides: changing them would be cultural adaptation, not translation.
+# THE COMPOUND NAME TRAP, derived from the pt-BR task. Same names, no
+# commas, on both sides.
 id: t1-nomes-0001-en
 schema_version: 1
 task_version: 1
@@ -14,9 +14,10 @@ tags:
 pair_id: nomes-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda; os NOMES sao os mesmos nos dois lados, como o 'Silva' do par
-  money -- troca-los seria adaptacao cultural e o par viraria localized. Tres
-  chamadas esperadas, em qualquer ordem; so o convidado e julgado.
+  So o idioma muda; os nomes sao os mesmos nos dois lados (troca-los seria
+  adaptacao cultural) e nenhum dos dois lados tem virgula. Tres chamadas.
+  POSSIVEL ASSIMETRIA, nao medida: a frase em portugues sinaliza contexto
+  brasileiro e pode ajudar a reconhecer o nome composto.
 generated_from: pt-BR
 family_id: nomes-compostos
 variant_group: nomes-01-en
@@ -24,7 +25,7 @@ canary_guid: aadf5b6d-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: enviar_convite
-    description: Sends an invitation to an event.
+    description: Sends an invitation to ONE person. For several, call once per person.
     parameters:
       type: object
       properties:
@@ -36,7 +37,7 @@ context:
       - convidado
       - evento
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -60,7 +61,7 @@ context:
       required:
       - motivo
 input:
-  user_message: send the Friday meeting invite to Maria Clara, João Pedro and Ana Luiza
+  user_message: send the Friday meeting invite to Maria Clara João Pedro and Ana Luiza
 expect:
   kind: tool_call
   calls:

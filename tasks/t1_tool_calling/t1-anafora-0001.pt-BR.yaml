@@ -1,5 +1,8 @@
-# ARMADILHA DA ANAFORA. 'Ele' e o Bruno. Quem resolve o pronome pela
-# proximidade, ou pelo primeiro nome citado, manda a pauta para a Ana.
+# ARMADILHA DA ANAFORA. 'Ele' e o Bruno, mas o nome mais PROXIMO do pronome
+# e o da Ana. Genero e proximidade apontam para pessoas diferentes: quem
+# resolve o pronome por proximidade manda a pauta para a Ana.
+# (A primeira versao punha o Bruno por ultimo, e ai genero e proximidade
+# concordavam -- a armadilha nao existia. Achado da revisao independente.)
 id: t1-anafora-0001
 schema_version: 1
 task_version: 1
@@ -14,10 +17,10 @@ tags:
 pair_id: anafora-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'manda a pauta pra ele' / 'send him the agenda'. ASSIMETRIA
-  DECLARADA, a favor do PORTUGUES: o artigo antes do nome ('a Ana', 'o Bruno')
-  da uma pista de genero que o ingles nao da. Isso tende a ENCOLHER o Delta, e
-  fica dito para ninguem ler o numero sem saber.
+  So o idioma muda: 'manda a pauta pra ele' / 'send him the agenda'; mesma ordem
+  dos nomes nos dois lados. ASSIMETRIA DECLARADA, a favor do PORTUGUES: o artigo
+  antes do nome ('o Bruno', 'a Ana') da uma pista de genero a mais. Tende a
+  ENCOLHER o Delta.
 generated_from: pt-BR
 family_id: anafora
 variant_group: anafora-01
@@ -25,7 +28,7 @@ canary_guid: f7ee46a4-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: enviar_pauta
-    description: Envia a pauta da reuniao para uma pessoa.
+    description: Envia a pauta da reunião para uma pessoa.
     parameters:
       type: object
       properties:
@@ -34,7 +37,7 @@ context:
       required:
       - destinatario
   - name: pedir_esclarecimento
-    description: Use quando faltar informacao para executar o pedido com seguranca.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -48,7 +51,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use quando nao for possivel ou apropriado executar o pedido.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -57,7 +60,7 @@ context:
       required:
       - motivo
 input:
-  user_message: Marquei com a Ana e o Bruno amanhã. Manda a pauta pra ele.
+  user_message: Vou me reunir amanhã com o Bruno e a Ana. Manda a pauta pra ele.
 expect:
   kind: tool_call
   calls:
@@ -73,4 +76,4 @@ expect:
   silent_failure_if:
   - arg: destinatario
     equals: Ana
-    label: pronome_para_a_pessoa_errada
+    label: pronome_resolvido_pela_proximidade

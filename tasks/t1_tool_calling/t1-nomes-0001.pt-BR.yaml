@@ -1,5 +1,7 @@
 # ARMADILHA DO NOME COMPOSTO. Maria Clara, Joao Pedro e Ana Luiza sao TRES
-# pessoas. Quem parte na virgula e no espaco convida seis, ou cinco.
+# pessoas. SEM VIRGULAS de proposito, como se escreve com pressa: com
+# virgula a pontuacao resolveria sozinha, e o que se quer medir e o
+# conhecimento de nome composto. Quem parte nos espacos convida seis.
 id: t1-nomes-0001
 schema_version: 1
 task_version: 1
@@ -14,9 +16,10 @@ tags:
 pair_id: nomes-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda; os NOMES sao os mesmos nos dois lados, como o 'Silva' do par
-  money -- troca-los seria adaptacao cultural e o par viraria localized. Tres
-  chamadas esperadas, em qualquer ordem; so o convidado e julgado.
+  So o idioma muda; os nomes sao os mesmos nos dois lados (troca-los seria
+  adaptacao cultural) e nenhum dos dois lados tem virgula. Tres chamadas.
+  POSSIVEL ASSIMETRIA, nao medida: a frase em portugues sinaliza contexto
+  brasileiro e pode ajudar a reconhecer o nome composto.
 generated_from: pt-BR
 family_id: nomes-compostos
 variant_group: nomes-01
@@ -24,7 +27,7 @@ canary_guid: a83856dc-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: enviar_convite
-    description: Envia um convite para um evento.
+    description: Envia um convite para UMA pessoa. Para várias, chame uma vez por pessoa.
     parameters:
       type: object
       properties:
@@ -36,7 +39,7 @@ context:
       - convidado
       - evento
   - name: pedir_esclarecimento
-    description: Use quando faltar informacao para executar o pedido com seguranca.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -51,7 +54,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use quando nao for possivel ou apropriado executar o pedido.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -60,7 +63,7 @@ context:
       required:
       - motivo
 input:
-  user_message: manda o convite da reunião de sexta pra Maria Clara, João Pedro e Ana Luiza
+  user_message: manda o convite da reunião de sexta pra Maria Clara João Pedro e Ana Luiza
 expect:
   kind: tool_call
   calls:

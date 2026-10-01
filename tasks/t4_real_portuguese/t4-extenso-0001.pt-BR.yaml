@@ -1,6 +1,8 @@
-# ARMADILHA DO NUMERO POR EXTENSO. 'Dois mil quinhentos e cinquenta' sao
-# 255000 centavos. FAMILIA DE MARGEM e a mais fraca do lote: o erro mais
-# provavel, esquecer de multiplicar por 100, nao tem nada de portugues.
+# ARMADILHA DO 'E CINQUENTA'. 'Dois mil e quinhentos e cinquenta reais' sao
+# R$ 2.550 -- na fala, com o 'e' a mais que a norma nao poe. Mas 'X e
+# cinquenta' depois de valor redondo costuma ser centavos ('dois e cinquenta'
+# = R$ 2,50), e quem cai le R$ 2.500,50. Proposta da revisao independente:
+# a primeira versao nao tinha nada de portugues no erro previsto.
 id: t4-extenso-0001
 schema_version: 1
 task_version: 1
@@ -10,13 +12,14 @@ split: public
 difficulty: 2
 tags:
 - numero-por-extenso
+- e-cinquenta
 - propenso-a-falha-silenciosa
 pair_id: extenso-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'dois mil quinhentos e cinquenta' / 'two thousand five
-  hundred fifty'. So o valor e julgado; o favorecido 'Silva' e o mesmo do par
-  money e nao entra na regua (ADR 0005 D1).
+  So o idioma muda: 'dois mil e quinhentos e cinquenta reais' / 'two thousand
+  five hundred and fifty reais'. O favorecido e julgado por one_of com a mesma
+  lista nos dois lados.
 generated_from: pt-BR
 family_id: numero-por-extenso
 variant_group: extenso-01
@@ -24,7 +27,8 @@ canary_guid: 1af5c98e-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: criar_transferencia
-    description: Cria uma transferencia bancaria. valor_centavos em centavos de real.
+    description: Cria uma transferência bancária para um contato. valor_centavos em centavos
+      de real.
     parameters:
       type: object
       properties:
@@ -36,7 +40,7 @@ context:
       - valor_centavos
       - favorecido
   - name: pedir_esclarecimento
-    description: Use quando faltar informacao para executar o pedido com seguranca.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -51,7 +55,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use quando nao for possivel ou apropriado executar o pedido.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -59,19 +63,33 @@ context:
           type: string
       required:
       - motivo
+  system_prompt: O usuário já está autenticado e confirmou este pedido. Execute diretamente;
+    use pedir_esclarecimento só se um dado faltar ou for ambíguo.
 input:
-  user_message: paga dois mil quinhentos e cinquenta reais pro fornecedor Silva
+  user_message: paga dois mil e quinhentos e cinquenta reais pro fornecedor Silva
 expect:
   kind: tool_call
   calls:
   - name: criar_transferencia
     args:
       valor_centavos: 255000
+      favorecido: Silva
     arg_specs:
       valor_centavos:
         matcher: exact_int
+      favorecido:
+        matcher: one_of
+        params:
+          values:
+          - fornecedor Silva
+          - supplier Silva
+          - the supplier Silva
+          case_sensitive: false
     extra_args: ignore
   silent_failure_if:
+  - arg: valor_centavos
+    equals: 250050
+    label: leu_e_cinquenta_como_centavos
   - arg: valor_centavos
     equals: 2550
     label: esqueceu_de_converter_para_centavos

@@ -1,4 +1,5 @@
-# THE ANAPHORA TRAP, derived from the pt-BR task.
+# THE ANAPHORA TRAP, derived from the pt-BR task. Gender points to Bruno,
+# recency points to Ana.
 id: t1-anafora-0001-en
 schema_version: 1
 task_version: 1
@@ -13,10 +14,10 @@ tags:
 pair_id: anafora-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'manda a pauta pra ele' / 'send him the agenda'. ASSIMETRIA
-  DECLARADA, a favor do PORTUGUES: o artigo antes do nome ('a Ana', 'o Bruno')
-  da uma pista de genero que o ingles nao da. Isso tende a ENCOLHER o Delta, e
-  fica dito para ninguem ler o numero sem saber.
+  So o idioma muda: 'manda a pauta pra ele' / 'send him the agenda'; mesma ordem
+  dos nomes nos dois lados. ASSIMETRIA DECLARADA, a favor do PORTUGUES: o artigo
+  antes do nome ('o Bruno', 'a Ana') da uma pista de genero a mais. Tende a
+  ENCOLHER o Delta.
 generated_from: pt-BR
 family_id: anafora
 variant_group: anafora-01-en
@@ -33,7 +34,7 @@ context:
       required:
       - destinatario
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -56,7 +57,7 @@ context:
       required:
       - motivo
 input:
-  user_message: I set up a meeting with Ana and Bruno tomorrow. Send him the agenda.
+  user_message: I'm meeting with Bruno and Ana tomorrow. Send him the agenda.
 expect:
   kind: tool_call
   calls:
@@ -72,4 +73,4 @@ expect:
   silent_failure_if:
   - arg: destinatario
     equals: Ana
-    label: pronome_para_a_pessoa_errada
+    label: pronome_resolvido_pela_proximidade

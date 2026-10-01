@@ -12,8 +12,9 @@ tags:
 pair_id: irrelevancia-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda; a isca lexical (mensagem, Bruno) existe igual nos dois
-  lados. A politica trivial 'nunca chama' acerta este par por construcao: por
+  So o idioma muda. ASSIMETRIA DECLARADA: em pt-BR 'mensagem' coincide com o
+  nome da ferramenta (enviar_mensagem), o que torna a isca mais forte deste
+  lado. A politica trivial 'nunca chama' acerta este par por construcao: por
   isso o controle exige chamada, e a linha de base sai no relatorio.
 generated_from: pt-BR
 family_id: irrelevancia
@@ -34,7 +35,7 @@ context:
       - destinatario
       - texto
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:

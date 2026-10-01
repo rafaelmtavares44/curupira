@@ -1,4 +1,4 @@
-# THE 'IN THE AFTERNOON' TRAP, derived from the pt-BR task.
+# THE 'QUARTER TO THREE IN THE AFTERNOON' TRAP, derived from the pt-BR task.
 id: t2-hora-0001-en
 schema_version: 1
 task_version: 1
@@ -8,15 +8,15 @@ split: public
 difficulty: 2
 tags:
 - hora
+- quinze-pras
 - convencao-12-24
 - propenso-a-falha-silenciosa
 pair_id: hora-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'as 2 da tarde' / 'at 2 in the afternoon'. Mesmo gabarito,
-  14:00, e o mesmo erro tipico nos dois lados, 02:00. FAMILIA DECLARADAMENTE
-  FRACA: e mais compreensao de texto do que formato brasileiro. Entrou para o
-  Delta passar de 10 familias (ADR 0011).
+  So o idioma muda: 'quinze pras tres da tarde' / 'quarter to three in the
+  afternoon'. Mesmo gabarito, 14:45, e os mesmos erros tipicos nos dois lados.
+  'Pras' e contracao coloquial; o ingles usa o registro coloquial equivalente.
 generated_from: pt-BR
 family_id: hora-12-24
 variant_group: hora-01-en
@@ -36,7 +36,7 @@ context:
       - hora_hhmm
       - titulo
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -60,24 +60,27 @@ context:
       required:
       - motivo
 input:
-  user_message: schedule the alignment call at 2 in the afternoon
+  user_message: set up the sync call for quarter to three in the afternoon
 expect:
   kind: tool_call
   calls:
   - name: marcar_horario
     args:
-      hora_hhmm: '14:00'
+      hora_hhmm: '14:45'
     arg_specs:
       hora_hhmm:
         matcher: one_of
         params:
           values:
-          - '14:00:00'
+          - '14:45:00'
     extra_args: ignore
   silent_failure_if:
   - arg: hora_hhmm
-    equals: 02:00
+    equals: '15:15'
+    label: leu_quinze_pras_como_e_quinze
+  - arg: hora_hhmm
+    equals: 02:45
     label: ignorou_da_tarde
   - arg: hora_hhmm
-    equals: '2:00'
-    label: ignorou_da_tarde
+    equals: 03:15
+    label: errou_os_dois

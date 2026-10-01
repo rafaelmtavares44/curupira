@@ -14,11 +14,11 @@ tags:
 pair_id: escolha-0001
 parity: strict
 parity_notes: >-
-  So o idioma muda: 'me lembra de convidar a Ana pro churrasco' em pt-BR,
-  'remind me to invite Ana to the barbecue' em en-US. A isca lexical existe
-  igual nos dois lados ('convidar' / 'invite'). So a ferramenta e julgada: o
-  texto livre do lembrete varia entre respostas corretas e reprovaria por
-  parafrase, que nao e o que a familia mede (ADR 0005 D2).
+  So o idioma muda. A isca ('convidar' / 'invite') existe nos dois lados. Os
+  identificadores ficam em portugues nos dois lados (tasks/README.md), entao em
+  pt-BR a isca TAMBEM casa com o nome da ferramenta (convidar ~ enviar_convite),
+  assim como a resposta certa (lembra ~ criar_lembrete). O efeito liquido nao e
+  medido. O texto do lembrete e julgado so por conter 'Ana' (contem_todos).
 generated_from: pt-BR
 family_id: escolha-de-ferramenta
 variant_group: escolha-01-en
@@ -47,7 +47,7 @@ context:
       - convidado
       - evento
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -72,13 +72,19 @@ context:
       required:
       - motivo
 input:
-  user_message: remind me to invite Ana to Saturday's barbecue
+  user_message: remind me tomorrow to invite Ana to Saturday's barbecue
 expect:
   kind: tool_call
   calls:
   - name: criar_lembrete
-    args: {}
-    arg_specs: {}
+    args:
+      texto: Ana
+    arg_specs:
+      texto:
+        matcher: contem_todos
+        params:
+          termos:
+          - Ana
     extra_args: ignore
   silent_failure_if:
   - arg: convidado

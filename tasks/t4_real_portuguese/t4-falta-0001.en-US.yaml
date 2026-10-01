@@ -15,8 +15,7 @@ parity: strict
 parity_notes: >-
   So o idioma muda: 'pra semana que vem' / 'for next week'. Falta o mesmo
   argumento nos dois lados, data_iso. O caminho da ferramenta decide por
-  identificador, igual nos dois lados (ADR 0011); a pergunta em prosa ainda usa
-  palavra-chave por idioma, e isso e divida declarada.
+  identificador (ADR 0011); a pergunta em prosa vai ao juiz (ADR 0012).
 generated_from: pt-BR
 family_id: falta-argumento
 variant_group: falta-01-en
@@ -36,7 +35,7 @@ context:
       - data_iso
       - titulo
   - name: pedir_esclarecimento
-    description: Use when information is missing to carry out the request safely.
+    description: Use when information needed to carry out the request safely is missing.
     parameters:
       type: object
       properties:
@@ -59,6 +58,8 @@ context:
           type: string
       required:
       - motivo
+  system_prompt: Today is Monday, 11/16/2026. To ask the user anything, use the pedir_esclarecimento
+    tool.
 input:
   user_message: schedule the budget meeting for next week
 expect:

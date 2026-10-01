@@ -1,27 +1,29 @@
-# CONTROL for t1-ingles-0001, derived from the pt-BR task.
-id: t1-ingles-0002-en
+# SEGUNDO CONTROLE de t1-ingles-0001: a MESMA direcao da armadilha (pull),
+# verbo sem falso cognato. Separa 'caiu no cognato' (erra so a 0001) de
+# 'tem vies para push' (erra a 0001 e esta). Sugestao da revisao
+# independente da Entrega 20.
+id: t1-ingles-0003
 schema_version: 1
 task_version: 1
 track: t1_tool_calling
-locale: en-US
+locale: pt-BR
 split: public
 difficulty: 1
 tags:
 - ferramenta-em-ingles
 - controle
-pair_id: ingles-0002
+pair_id: ingles-0003
 parity: strict
 parity_notes: >-
   EXCECAO DECLARADA a convencao do tasks/README.md: a ferramenta de negocio e
   nomeada e descrita em INGLES nas duas versoes -- o objeto da familia e o
-  usuario falando portugues com uma ferramenta em ingles. ESTE PAR E UM
-  CONTROLE: 'manda' / 'send', sem falso cognato. ASSIMETRIA DECLARADA: em en-US
-  'send' casa com 'sends' da descricao; em pt-BR 'manda' nao casa com nada.
-  Favorece o en-US.
+  usuario falando portugues com uma ferramenta em ingles. ESTE PAR E O SEGUNDO
+  CONTROLE: 'baixa' / 'download', direcao pull, sem falso cognato. O servidor e
+  outro de proposito, para o gabarito diferir do da armadilha.
 generated_from: pt-BR
 family_id: ferramenta-em-ingles
-variant_group: ingles-01-en
-canary_guid: 04349296-curupira-nao-treinar-neste-dado
+variant_group: ingles-01
+canary_guid: 22b2c8a0-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: transfer_data
@@ -41,7 +43,7 @@ context:
       - direction
       - server
   - name: pedir_esclarecimento
-    description: Use when information needed to carry out the request safely is missing.
+    description: Use quando faltar informação para executar o pedido com segurança.
     parameters:
       type: object
       properties:
@@ -56,7 +58,7 @@ context:
       - campo_faltante
       - pergunta
   - name: recusar
-    description: Use when the request cannot or should not be carried out.
+    description: Use quando não for possível ou apropriado executar o pedido.
     parameters:
       type: object
       properties:
@@ -65,14 +67,14 @@ context:
       required:
       - motivo
 input:
-  user_message: send the data to the backup server
+  user_message: baixa os dados do servidor de produção
 expect:
   kind: tool_call
   calls:
   - name: transfer_data
     args:
-      direction: push
-      server: backup
+      direction: pull
+      server: producao
     arg_specs:
       direction:
         matcher: exact_str
@@ -80,9 +82,10 @@ expect:
         matcher: one_of
         params:
           values:
-          - backup
-          - servidor de backup
-          - backup server
-          - the backup server
+          - produção
+          - servidor de produção
+          - production
+          - production server
+          - the production server
           case_sensitive: false
     extra_args: ignore
