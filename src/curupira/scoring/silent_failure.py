@@ -44,6 +44,14 @@ from curupira.core.result import ChamadaObservada, RespostaCrua
 FERRAMENTA_ESCLARECIMENTO = "pedir_esclarecimento"
 FERRAMENTA_RECUSA = "recusar"
 
+CAMPO_DO_ESCLARECIMENTO: Final = "campo_faltante"
+"""O argumento de `pedir_esclarecimento` que diz O QUE falta.
+
+Nas tarefas livres e um `enum` com os nomes dos argumentos da ferramenta de
+negocio, identicos nas duas versoes do par. E o que torna o caminho da
+ferramenta no `clarify` uma comparacao por identificador, sem lexico (ADR 0011).
+"""
+
 FERRAMENTAS_DE_ABSTENCAO: Final = frozenset({FERRAMENTA_ESCLARECIMENTO, FERRAMENTA_RECUSA})
 
 ROTULO_NAO_ROTULADO = "erro_nao_rotulado"

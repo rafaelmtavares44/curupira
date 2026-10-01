@@ -527,9 +527,18 @@ def test_dataset_real_congela(raiz_do_repo: Path, tmp_path: Path) -> None:
     mede nada, só cobra pedágio, e ensina a editar o teste por reflexo. O que
     vale conferir é que a contagem impressa pela CLI é a mesma que sai dos
     arquivos.
+
+    **As suítes reais vão junto para o destino.** O congelamento de verdade roda
+    com `--destino suites`, onde a v0.1 existe, e as regras novas só governam
+    tarefa livre (ADR 0010). Ensaiar num destino vazio é ensaiar num mundo em que
+    nada foi congelado — e ali as tarefas `money-*` reprovam regras que, no
+    mundo real, não se aplicam a elas. Mesmo defeito que a ADR 0010 D4 corrigiu
+    no teste do lint.
     """
     copia = tmp_path / "tasks"
     shutil.copytree(raiz_do_repo / "tasks", copia)
+    destino = tmp_path / "suites"
+    shutil.copytree(raiz_do_repo / "suites", destino)
 
     tarefas = list(carregar_diretorio(copia))
     strict = {t.pair_id for t in tarefas if t.parity is Paridade.STRICT and t.pair_id}
@@ -537,7 +546,7 @@ def test_dataset_real_congela(raiz_do_repo: Path, tmp_path: Path) -> None:
 
     resultado = runner.invoke(
         app,
-        ["suite", "freeze", "ensaio", "--tarefas", str(copia), "--destino", str(tmp_path / "s")],
+        ["suite", "freeze", "ensaio", "--tarefas", str(copia), "--destino", str(destino)],
     )
 
     assert resultado.exit_code == 0, resultado.output

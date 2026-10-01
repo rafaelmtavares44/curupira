@@ -273,14 +273,85 @@ def test_clarify_reprova_quem_inventou() -> None:
     assert "executou" in veredicto.motivo
 
 
-def test_clarify_passa_por_ast_com_a_ferramenta() -> None:
-    """Chamou `pedir_esclarecimento` citando o slot: nada de léxico, nada de juiz."""
-    resposta = RespostaCrua(
-        tool_calls=(ChamadaObservada(name="pedir_esclarecimento", args={"campo": "favorecido"}),)
+def _pediu(*campos: str, pergunta: str = "") -> RespostaCrua:
+    """Resposta que chama `pedir_esclarecimento` uma vez por campo."""
+    return RespostaCrua(
+        tool_calls=tuple(
+            ChamadaObservada(
+                name="pedir_esclarecimento",
+                args={"campo_faltante": campo, "pergunta": pergunta},
+            )
+            for campo in campos
+        )
     )
-    veredicto = pontuar_clarify(_clarify(), resposta)
+
+
+def test_clarify_passa_por_ast_com_o_identificador_certo() -> None:
+    """Chamou `pedir_esclarecimento` com o identificador: nada de léxico, nada de juiz."""
+    veredicto = pontuar_clarify(_clarify(), _pediu("favorecido"))
     assert veredicto.desfecho is Desfecho.PASSOU
     assert veredicto.camada is CamadaDePontuacao.AST
+
+
+def test_identificador_traduzido_falha_nos_dois_idiomas_igual() -> None:
+    """A garantia central da ADR 0011: a régua da ferramenta não tem idioma.
+
+    Antes, a pt-BR precisava de `destinatario` na lista de palavras-chave e a
+    en-US de `recipient`, cada lista escrita à mão. Agora as duas versões do par
+    declaram o MESMO `enum`, com os identificadores em português, e a decisão é
+    por igualdade exata. Um agente que traduz o identificador erra igual nas
+    duas versões — que é exatamente o que um par strict precisa.
+    """
+    espera = _clarify()
+    for traduzido in ("recipient", "destinatario", "Favorecido", "favorecido "):
+        veredicto = pontuar_clarify(espera, _pediu(traduzido))
+        assert veredicto.desfecho is Desfecho.FALHOU, traduzido
+        assert veredicto.camada is CamadaDePontuacao.AST
+
+
+def test_palavra_chave_na_pergunta_nao_salva_identificador_errado() -> None:
+    """O caminho da ferramenta não olha o texto da pergunta — de propósito.
+
+    Se olhasse, o léxico voltaria pela porta dos fundos: "para quem?" na
+    `pergunta` cobriria o slot mesmo com `campo_faltante` errado, e a lista de
+    palavras de cada idioma voltaria a decidir o Delta.
+    """
+    veredicto = pontuar_clarify(_clarify(), _pediu("valor", pergunta="Para quem devo transferir?"))
+    assert veredicto.desfecho is Desfecho.FALHOU
+
+
+def test_ferramenta_precisa_cobrir_todos_os_slots() -> None:
+    espera = _clarify(missing_slots=("favorecido", "valor_centavos"))
+    assert pontuar_clarify(espera, _pediu("favorecido")).desfecho is Desfecho.FALHOU
+
+
+def test_varias_chamadas_somam_os_slots() -> None:
+    """Pedir um campo por chamada é tão válido quanto pedir tudo de uma vez."""
+    espera = _clarify(missing_slots=("favorecido", "valor_centavos"))
+    veredicto = pontuar_clarify(espera, _pediu("favorecido", "valor_centavos"))
+    assert veredicto.desfecho is Desfecho.PASSOU
+
+
+def test_campo_faltante_ausente_ou_nao_textual_nao_cobre_nada() -> None:
+    resposta = RespostaCrua(
+        tool_calls=(
+            ChamadaObservada(name="pedir_esclarecimento", args={"pergunta": "qual?"}),
+            ChamadaObservada(name="pedir_esclarecimento", args={"campo_faltante": 7}),
+        )
+    )
+    assert pontuar_clarify(_clarify(), resposta).desfecho is Desfecho.FALHOU
+
+
+def test_recusar_nao_e_pedir_esclarecimento() -> None:
+    """`recusar` não diz o que falta; numa T4 ela não é o caminho da ferramenta.
+
+    Sem pergunta em prosa, é falha. Antes ela contava como "perguntou" e bastava
+    o texto do motivo conter a palavra-chave.
+    """
+    resposta = RespostaCrua(
+        tool_calls=(ChamadaObservada(name="recusar", args={"motivo": "falta o favorecido"}),)
+    )
+    assert pontuar_clarify(_clarify(), resposta).desfecho is Desfecho.FALHOU
 
 
 def test_clarify_passa_por_palavra_chave_no_texto() -> None:
@@ -426,10 +497,7 @@ def test_clarify_exige_pergunta_e_nao_so_a_palavra() -> None:
 
 def test_clarify_com_ferramenta_nao_exige_interrogacao() -> None:
     """Chamar `pedir_esclarecimento` JÁ é a pergunta."""
-    resposta = RespostaCrua(
-        tool_calls=(ChamadaObservada(name="pedir_esclarecimento", args={"campo": "favorecido"}),)
-    )
-    assert pontuar_clarify(_clarify(), resposta).desfecho is Desfecho.PASSOU
+    assert pontuar_clarify(_clarify(), _pediu("favorecido")).desfecho is Desfecho.PASSOU
 
 
 # --------------------------------------------------------------------------

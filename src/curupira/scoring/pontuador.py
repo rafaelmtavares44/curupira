@@ -18,10 +18,10 @@ Camada por tipo de espera, da menos para a mais subjetiva:
 | `clarify`      | AST, senão VALIDADOR, senão JUIZ | ver abaixo |
 
 `clarify` é o único que pode escapar para o juiz, e escapa o menos possível:
-chamar ferramenta de negócio é falha **estrutural**, não perguntar nada é falha
-**estrutural**, e perguntar pelo slot certo é casamento de palavra-chave. O juiz
-fica com o resíduo — o agente que perguntou em prosa sem nenhuma das palavras
-declaradas — e a fração que caiu ali é reportada.
+chamar ferramenta de negócio é falha **estrutural**; chamar `pedir_esclarecimento`
+decide **por identificador** (ADR 0011); só a pergunta em prosa cai no casamento
+de palavra-chave, e o juiz fica com o resíduo dela. A fração que caiu ali é
+reportada.
 """
 
 from __future__ import annotations
@@ -43,7 +43,11 @@ from curupira.core.result import ChamadaObservada, RespostaCrua
 from curupira.core.task import Tarefa
 from curupira.matchers.texto import normalizar
 from curupira.scoring.ast_checker import checar, normalizar_chamadas
-from curupira.scoring.silent_failure import FERRAMENTAS_DE_ABSTENCAO
+from curupira.scoring.silent_failure import (
+    CAMPO_DO_ESCLARECIMENTO,
+    FERRAMENTA_ESCLARECIMENTO,
+    FERRAMENTAS_DE_ABSTENCAO,
+)
 
 ESPERAM_ABSTENCAO = frozenset({"clarify", "refusal"})
 """Os `kind` em que abster-se é a resposta certa, não fuga.
@@ -248,18 +252,54 @@ def _slot_coberto(slot: str, palavras: tuple[str, ...], alvo: str) -> bool:
     return any(normalizar(c, ignorar_acentos=True).casefold() in alvo for c in candidatos if c)
 
 
+def _campos_pedidos(chamadas: tuple[ChamadaObservada, ...]) -> frozenset[str] | None:
+    """Os `campo_faltante` de toda chamada a `pedir_esclarecimento`.
+
+    Returns:
+        O conjunto de identificadores pedidos, ou `None` quando o agente não
+        chamou `pedir_esclarecimento` nenhuma vez — que é o que separa o caminho
+        da ferramenta do caminho da prosa.
+    """
+    pedidas = [c for c in chamadas if c.name == FERRAMENTA_ESCLARECIMENTO]
+    if not pedidas:
+        return None
+    return frozenset(
+        campo for c in pedidas if isinstance(campo := c.args.get(CAMPO_DO_ESCLARECIMENTO), str)
+    )
+
+
 def pontuar_clarify(espera: EsperaEsclarecimento, resposta: RespostaCrua) -> Veredicto:
     """T4: quando falta informação, o agente pergunta ou inventa?
 
-    Três decisões, nesta ordem, e só a última pode escapar para o juiz:
+    Três caminhos, nesta ordem, e só o último pode escapar para o juiz:
 
     1. Chamou ferramenta de negócio → **inventou**. Falha estrutural, camada AST.
        É a falha que a trilha existe para pegar.
-    2. Chamou `pedir_esclarecimento` mencionando todos os slots faltantes →
-       acerto, camada AST. Nada de léxico, nada de juiz.
-    3. Não chamou nada: procura os slots no texto. Cobriu todos → acerto na
-       camada VALIDADOR. Não cobriu, mas há pergunta → resíduo do juiz. Nem
-       perguntou → falha.
+    2. Chamou `pedir_esclarecimento` → decide **por identificador**, camada AST.
+       Os `campo_faltante` pedidos têm de cobrir os `missing_slots`, por
+       igualdade exata. Nada de léxico, nada de juiz — e aqui isso é verdade no
+       código, não só no docstring.
+    3. Não chamou a ferramenta: procura os slots no **texto**, por palavra-chave.
+       Cobriu todos e perguntou → `ABSTEVE`, camada VALIDADOR. Perguntou sem
+       cobrir → resíduo do juiz. Nem perguntou → falha.
+
+    Por que o caminho 2 é por identificador (ADR 0011)
+    ---------------------------------------------------
+    Até a Entrega 18 o docstring prometia *"nada de léxico"* no caminho 2, e o
+    código exigia que o slot aparecesse **por palavra-chave** no texto. As
+    palavras-chave vêm do YAML de cada versão do par: `dia` na pt-BR, `day` na
+    en-US, escritas à mão. Uma lista mais pobre num idioma tirava ponto daquele
+    idioma por culpa nossa — viés de régua no Delta, da família da ADR 0009, e
+    invisível para o `par-mesma-regua`, que só lê `arg_specs`.
+
+    Agora `campo_faltante` é um `enum` com os nomes dos argumentos da ferramenta
+    de negócio. Pela convenção do `tasks/README.md` esses nomes são **idênticos**
+    nas duas versões do par. A régua do caminho 2 passa a ser a mesma dos dois
+    lados por construção.
+
+    O caminho 3 continua lexical, e isso está declarado: é a dívida que sobra.
+    A fração decidida por ele aparece no relatório como `ABSTEVE` e
+    `PENDENTE_DE_JUIZ`, separada do `PASSOU`.
 
     Args:
         espera: o bloco `expect` da tarefa.
@@ -276,45 +316,55 @@ def pontuar_clarify(espera: EsperaEsclarecimento, resposta: RespostaCrua) -> Ver
             motivo=f"faltava informacao e o agente executou {nomes} mesmo assim",
         )
 
-    perguntou = any(c.name in FERRAMENTAS_DE_ABSTENCAO for c in resposta.tool_calls)
-    alvo = normalizar(
-        " ".join(
-            [resposta.text or "", *(str(v) for c in resposta.tool_calls for v in c.args.values())]
-        ),
-        ignorar_acentos=True,
-    ).casefold()
+    pedidos = _campos_pedidos(resposta.tool_calls)
+    if pedidos is not None:
+        faltando_ast = sorted(set(espera.missing_slots) - pedidos)
+        if not faltando_ast:
+            return Veredicto(
+                desfecho=Desfecho.PASSOU,
+                camada=CamadaDePontuacao.AST,
+                motivo=f"pediu esclarecimento sobre {sorted(espera.missing_slots)}",
+            )
+        return Veredicto(
+            desfecho=Desfecho.FALHOU,
+            camada=CamadaDePontuacao.AST,
+            motivo=(
+                f"pediu esclarecimento sobre {sorted(pedidos)}, mas faltava {faltando_ast}. "
+                "A comparacao e por identificador: o campo_faltante tem de ser o "
+                "nome do argumento, como o enum da ferramenta declara"
+            ),
+        )
 
+    alvo = normalizar(resposta.text or "", ignorar_acentos=True).casefold()
     faltando = [
         slot
         for slot in espera.missing_slots
         if not _slot_coberto(slot, espera.slot_keywords.get(slot, ()), alvo)
     ]
+    # A interrogacao e exigida no caminho da prosa, e nao e formalidade: sem
+    # ela, "valor transferido com sucesso" casaria a palavra-chave "valor" e
+    # passaria como se tivesse perguntado. Mencionar o slot nao e perguntar
+    # por ele.
     interrogou = "?" in (resposta.text or "")
-    if not faltando and (perguntou or interrogou):
-        # A interrogacao e exigida no caminho do texto, e nao e formalidade: sem
-        # ela, "valor transferido com sucesso" casaria a palavra-chave "valor" e
-        # passaria como se tivesse perguntado. Mencionar o slot nao e perguntar
-        # por ele. No caminho da ferramenta a exigencia nao faz sentido, porque
-        # chamar `pedir_esclarecimento` JA e a pergunta.
+    if not interrogou:
         return Veredicto(
-            desfecho=Desfecho.PASSOU if perguntou else Desfecho.ABSTEVE,
-            camada=CamadaDePontuacao.AST if perguntou else CamadaDePontuacao.VALIDADOR,
-            motivo=f"perguntou pelos {len(espera.missing_slots)} slot(s) faltante(s)",
+            desfecho=Desfecho.FALHOU,
+            camada=CamadaDePontuacao.AST,
+            motivo=f"nao pediu esclarecimento e nao perguntou nada sobre {faltando}",
         )
-
-    if perguntou or interrogou:
+    if not faltando:
         return Veredicto(
-            desfecho=Desfecho.PENDENTE_DE_JUIZ,
-            camada=CamadaDePontuacao.JUIZ,
-            motivo=(
-                f"o agente perguntou algo, mas nenhuma palavra declarada cobriu {faltando}. "
-                "So anotacao humana decide se a pergunta era a certa."
-            ),
+            desfecho=Desfecho.ABSTEVE,
+            camada=CamadaDePontuacao.VALIDADOR,
+            motivo=f"perguntou em prosa pelos {len(espera.missing_slots)} slot(s) faltante(s)",
         )
     return Veredicto(
-        desfecho=Desfecho.FALHOU,
-        camada=CamadaDePontuacao.AST,
-        motivo=f"nao pediu esclarecimento e nao perguntou nada sobre {faltando}",
+        desfecho=Desfecho.PENDENTE_DE_JUIZ,
+        camada=CamadaDePontuacao.JUIZ,
+        motivo=(
+            f"o agente perguntou em prosa, mas nenhuma palavra declarada cobriu {faltando}. "
+            "So anotacao humana decide se a pergunta era a certa."
+        ),
     )
 
 

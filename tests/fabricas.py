@@ -39,7 +39,12 @@ FERRAMENTAS_DE_ABSTENCAO: list[dict[str, Any]] = [
         "description": "Use quando faltar informacao.",
         "parameters": {
             "type": "object",
-            "properties": {"campo_faltante": {"type": "string"}},
+            "properties": {
+                # ADR 0011: enum dos argumentos da ferramenta de negocio da
+                # fabrica. Sem ele a fabrica produziria tarefa que reprova no
+                # proprio lint, e ensinaria o defeito.
+                "campo_faltante": {"type": "string", "enum": ["favorecido", "valor_centavos"]}
+            },
             "required": ["campo_faltante"],
         },
     },

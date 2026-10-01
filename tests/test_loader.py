@@ -682,3 +682,101 @@ def test_ids_congelados_reune_todas_as_suites() -> None:
 
 def test_sem_suite_nenhuma_toda_tarefa_e_livre() -> None:
     assert ids_congelados([]) == frozenset()
+
+
+# --------------------------------------------------------------------------
+# O esclarecimento decide por identificador (ADR 0011)
+# --------------------------------------------------------------------------
+
+
+def _esclarecimento(bruto: dict[str, Any]) -> dict[str, Any]:
+    """A definição de `pedir_esclarecimento` dentro de uma tarefa bruta."""
+    for ferramenta in bruto["context"]["tools"]:
+        if ferramenta["name"] == "pedir_esclarecimento":
+            assert isinstance(ferramenta, dict)
+            return ferramenta
+    raise AssertionError("a fabrica sempre oferece pedir_esclarecimento")
+
+
+def _sem_enum(bruto: dict[str, Any]) -> dict[str, Any]:
+    """Troca a definição compartilhada por uma cópia com `campo_faltante` livre.
+
+    Cópia de propósito: a fábrica reaproveita a mesma lista de ferramentas entre
+    tarefas, e mutar a original vazaria para os outros testes.
+    """
+    bruto["context"]["tools"] = [
+        {
+            **f,
+            "parameters": {"type": "object", "properties": {"campo_faltante": {"type": "string"}}},
+        }
+        if f["name"] == "pedir_esclarecimento"
+        else f
+        for f in bruto["context"]["tools"]
+    ]
+    return bruto
+
+
+def test_campo_faltante_sem_enum_e_erro_em_tarefa_livre() -> None:
+    """Sem `enum`, o caminho da ferramenta no clarify volta a precisar de léxico."""
+    problemas = lint_do_dataset(_tarefas(_sem_enum(tarefa_bruta())))
+    assert "esclarecimento-por-identificador" in _regras(problemas)
+    assert all(
+        p.severidade is Severidade.ERRO
+        for p in problemas
+        if p.regra == "esclarecimento-por-identificador"
+    )
+
+
+def test_enum_que_nao_bate_com_os_argumentos_e_erro() -> None:
+    """Enum incompleto deixa um argumento impossível de pedir; sobrando, convida a inventar."""
+    for enum in (["favorecido"], ["favorecido", "valor_centavos", "moeda"], ["destinatario"]):
+        bruto = tarefa_bruta()
+        bruto["context"]["tools"] = [
+            {
+                **f,
+                "parameters": {
+                    "type": "object",
+                    "properties": {"campo_faltante": {"type": "string", "enum": enum}},
+                },
+            }
+            if f["name"] == "pedir_esclarecimento"
+            else f
+            for f in bruto["context"]["tools"]
+        ]
+        assert "esclarecimento-por-identificador" in _regras(lint_do_dataset(_tarefas(bruto))), enum
+
+
+def test_enum_igual_aos_argumentos_passa() -> None:
+    assert "esclarecimento-por-identificador" not in _regras(
+        lint_do_dataset(_tarefas(tarefa_bruta()))
+    )
+
+
+def test_tarefa_congelada_sem_enum_nao_e_cobrada() -> None:
+    """As `money-*` da v0.1 nasceram antes da convenção e são imutáveis (ADR 0010)."""
+    tarefas = _tarefas(*(_sem_enum(b) for b in par_strict()))
+    congelado = lint_do_dataset(tarefas, suites=[_congelada(tarefas)])
+    assert "esclarecimento-por-identificador" not in _regras(congelado)
+
+
+def test_slot_fora_dos_argumentos_e_erro() -> None:
+    """Slot que não é argumento não pode ser pedido pelo enum: tarefa impossível."""
+    bruto = tarefa_bruta(
+        expect={"kind": "clarify", "missing_slots": ["destinatario"]},
+    )
+    assert "slot-e-identificador" in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_slot_que_e_argumento_passa() -> None:
+    bruto = tarefa_bruta(expect={"kind": "clarify", "missing_slots": ["favorecido"]})
+    assert "slot-e-identificador" not in _regras(lint_do_dataset(_tarefas(bruto)))
+
+
+def test_tarefa_sem_pedir_esclarecimento_nao_e_cobrada_por_esta_regra() -> None:
+    """Quem não oferece a ferramenta já é avisado pelo `abstencao-oferecida`."""
+    bruto = tarefa_bruta()
+    bruto["context"]["tools"] = [
+        f for f in bruto["context"]["tools"] if f["name"] != "pedir_esclarecimento"
+    ]
+    assert "esclarecimento-por-identificador" not in _regras(lint_do_dataset(_tarefas(bruto)))
+    assert _esclarecimento(tarefa_bruta())["name"] == "pedir_esclarecimento"

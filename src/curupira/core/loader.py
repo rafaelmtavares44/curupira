@@ -24,6 +24,7 @@ from curupira.core.expect import (
     ChamadaEsperada,
     EspecificacaoDeArgumento,
     EsperaChamadaDeFerramenta,
+    EsperaEsclarecimento,
     EsperaExtracao,
     EsperaRecusa,
     EsperaSequencia,
@@ -33,6 +34,7 @@ from curupira.core.registry import nomes_registrados
 from curupira.core.suite import Suite
 from curupira.core.task import Tarefa
 from curupira.matchers.numerico import CHAVE_DOS_FORMATOS
+from curupira.scoring.silent_failure import CAMPO_DO_ESCLARECIMENTO, FERRAMENTA_ESCLARECIMENTO
 
 ID_DA_FORMA_CURTA = "canonica"
 """Id da alternativa que a forma curta do YAML gera."""
@@ -647,6 +649,90 @@ def ids_congelados(suites: Sequence[Suite]) -> frozenset[str]:
     return frozenset(entrada.task_id for suite in suites for entrada in suite.entries)
 
 
+def _identificadores_de_negocio(tarefa: Tarefa) -> list[str]:
+    """Os nomes de argumento das ferramentas de negócio, ordenados.
+
+    É o que o `enum` de `campo_faltante` tem de listar: o conjunto exato de
+    coisas que podem faltar numa chamada de negócio desta tarefa.
+    """
+    nomes: set[str] = set()
+    for ferramenta in tarefa.context.tools:
+        if ferramenta.name in FERRAMENTAS_DE_ABSTENCAO:
+            continue
+        propriedades = ferramenta.parameters.get("properties")
+        if isinstance(propriedades, dict):
+            nomes.update(str(chave) for chave in propriedades)
+    return sorted(nomes)
+
+
+def _enum_do_esclarecimento(tarefa: Tarefa) -> list[str] | None:
+    """O `enum` declarado em `campo_faltante`, ou `None` se não houver."""
+    for ferramenta in tarefa.context.tools:
+        if ferramenta.name != FERRAMENTA_ESCLARECIMENTO:
+            continue
+        propriedades = ferramenta.parameters.get("properties")
+        campo = (
+            propriedades.get(CAMPO_DO_ESCLARECIMENTO) if isinstance(propriedades, dict) else None
+        )
+        valores = campo.get("enum") if isinstance(campo, dict) else None
+        if isinstance(valores, list):
+            return sorted(str(v) for v in valores)
+    return None
+
+
+def _lint_esclarecimento_por_identificador(
+    tarefas: Sequence[Tarefa], congelados: frozenset[str]
+) -> list[ProblemaDeLint]:
+    """`campo_faltante` é um `enum` dos argumentos de negócio (ADR 0011).
+
+    Duas regras, ambas só para tarefa livre (ADR 0010):
+
+    - `esclarecimento-por-identificador`: quem oferece `pedir_esclarecimento`
+      declara `campo_faltante` como `enum` igual aos nomes de argumento das
+      ferramentas de negócio. Sem isso o caminho da ferramenta no `clarify` não
+      tem como decidir sem léxico.
+    - `slot-e-identificador`: em `clarify`, todo `missing_slot` é um desses
+      nomes. Um slot fora do `enum` torna a tarefa impossível de passar pelo
+      caminho da ferramenta — a mesma classe de defeito da ferramenta proibida
+      que não existe, na T5.
+    """
+    problemas: list[ProblemaDeLint] = []
+    for tarefa in tarefas:
+        if tarefa.id in congelados:
+            continue
+        nomes_oferecidos = {f.name for f in tarefa.context.tools}
+        if FERRAMENTA_ESCLARECIMENTO not in nomes_oferecidos:
+            continue
+        esperado = _identificadores_de_negocio(tarefa)
+        declarado = _enum_do_esclarecimento(tarefa)
+        if declarado != esperado:
+            problemas.append(
+                _erro(
+                    "esclarecimento-por-identificador",
+                    tarefa.id,
+                    f"pedir_esclarecimento.{CAMPO_DO_ESCLARECIMENTO} declara enum "
+                    f"{declarado}; tem de ser {esperado}, os argumentos das "
+                    "ferramentas de negocio. E o que faz o clarify decidir por "
+                    "identificador, igual nas duas versoes do par, em vez de por "
+                    "palavra-chave escrita a mao em cada idioma",
+                )
+            )
+        if isinstance(tarefa.expect, EsperaEsclarecimento):
+            fora = sorted(set(tarefa.expect.missing_slots) - set(esperado))
+            if fora:
+                problemas.append(
+                    _erro(
+                        "slot-e-identificador",
+                        tarefa.id,
+                        f"missing_slots {fora} nao sao argumentos de nenhuma "
+                        "ferramenta de negocio. O agente nao tem como pedir por "
+                        "eles pelo enum, e a tarefa nao pode ser acertada pela "
+                        "ferramenta",
+                    )
+                )
+    return problemas
+
+
 def _lint_notas_especificas(
     tarefas: Sequence[Tarefa], congelados: frozenset[str]
 ) -> list[ProblemaDeLint]:
@@ -760,7 +846,9 @@ def lint_do_dataset(
     problemas: list[ProblemaDeLint] = []
     for regra in _REGRAS:
         problemas.extend(regra(tarefas))
-    problemas.extend(_lint_notas_especificas(tarefas, ids_congelados(suites)))
+    congelados = ids_congelados(suites)
+    problemas.extend(_lint_notas_especificas(tarefas, congelados))
+    problemas.extend(_lint_esclarecimento_por_identificador(tarefas, congelados))
     problemas.extend(lint_do_congelamento(tarefas, suites))
 
     if estrito:

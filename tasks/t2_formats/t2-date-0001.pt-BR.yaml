@@ -55,7 +55,7 @@ context:
       parameters:
         type: object
         properties:
-          campo_faltante: {type: string}
+          campo_faltante: {type: string, enum: [data_iso, titulo]}
           pergunta: {type: string}
         required: [campo_faltante, pergunta]
 

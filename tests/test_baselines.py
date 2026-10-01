@@ -118,9 +118,10 @@ def test_sempre_abstem_nao_gabarita_esclarecimento() -> None:
     """Perguntar sem dizer o que falta não é pedir esclarecimento.
 
     A T4 mede se o agente pergunta pela COISA CERTA, não se emite ruído
-    interrogativo. A política trivial chama `pedir_esclarecimento` com argumento
-    vazio, o pontuador manda para o juiz, e aqui isso conta como não-acerto —
-    é comportamento da política, não lacuna nossa.
+    interrogativo. A política trivial chama `pedir_esclarecimento` com
+    `campo_faltante: "indefinido"`, que não é identificador de argumento
+    nenhum, e o pontuador reprova na camada AST (ADR 0011). Até a Entrega 18
+    isso ia para o juiz; agora é decidido sem ele.
     """
     assert nota_da_politica(PoliticaTrivial.SEMPRE_ABSTEM, [_tarefa(ESCLARECIMENTO)]) == 0.0
 

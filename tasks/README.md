@@ -52,6 +52,25 @@ chama uma ferramenta, e chamada é o que o harness observa. Sem elas, medir
 abstenção exigiria um léxico de hedge — que não é equivalente entre idiomas e
 contaminaria o Delta com a nossa própria lista de palavras.
 
+### `campo_faltante` é um `enum` dos argumentos de negócio
+
+```yaml
+- name: pedir_esclarecimento
+  parameters:
+    properties:
+      campo_faltante: {type: string, enum: [data_iso, titulo]}
+      pergunta:       {type: string}
+```
+
+O `enum` lista **exatamente** os nomes de argumento das ferramentas de negócio
+da tarefa — e, pela regra acima, esses nomes são idênticos nas duas versões do
+par. É isso que deixa o `clarify` decidir **por identificador**, sem palavra-chave
+escrita à mão em cada idioma (ADR 0011). Os `missing_slots` de uma tarefa
+`clarify` são nomes desse `enum`.
+
+Dois lints cobram: `esclarecimento-por-identificador` e `slot-e-identificador`.
+As tarefas congeladas na v0.1 nasceram antes desta convenção e ficam como estão.
+
 ## Duas variantes por família: a armadilha e o controle
 
 Cada família traz ao menos duas tarefas no mesmo `variant_group`, com
