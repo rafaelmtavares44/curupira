@@ -71,7 +71,7 @@ expect:
     args:
       convidado: Maria Clara
     arg_specs:
-      convidado: &id001
+      convidado:
         matcher: fuzzy_name
         params:
           threshold: 0.9
@@ -80,13 +80,19 @@ expect:
     args:
       convidado: João Pedro
     arg_specs:
-      convidado: *id001
+      convidado:
+        matcher: fuzzy_name
+        params:
+          threshold: 0.9
     extra_args: ignore
   - name: enviar_convite
     args:
       convidado: Ana Luiza
     arg_specs:
-      convidado: *id001
+      convidado:
+        matcher: fuzzy_name
+        params:
+          threshold: 0.9
     extra_args: ignore
   silent_failure_if:
   - arg: convidado

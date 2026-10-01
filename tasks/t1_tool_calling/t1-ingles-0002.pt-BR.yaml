@@ -2,7 +2,7 @@
 # cognato, direcao oposta (push).
 id: t1-ingles-0002
 schema_version: 1
-task_version: 1
+task_version: 2
 track: t1_tool_calling
 locale: pt-BR
 split: public
@@ -38,6 +38,9 @@ context:
           - pull
         server:
           type: string
+          enum:
+          - backup
+          - staging
       required:
       - direction
       - server
@@ -78,12 +81,5 @@ expect:
       direction:
         matcher: exact_str
       server:
-        matcher: one_of
-        params:
-          values:
-          - backup
-          - servidor de backup
-          - backup server
-          - the backup server
-          case_sensitive: false
+        matcher: exact_str
     extra_args: ignore

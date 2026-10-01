@@ -5,7 +5,7 @@
 # acerta so esta. E exatamente isso que `variant_group` existe para separar.
 id: t2-date-0002
 schema_version: 1
-task_version: 1
+task_version: 2
 
 track: t2_formats
 locale: pt-BR
@@ -17,12 +17,11 @@ pair_id: date-0002
 parity: strict
 parity_notes: >-
   Apenas o idioma e a convencao de data correspondente mudam: `19/08/2026`
-  em pt-BR, `08/19/2026` em en-US. Mesma ferramenta, mesmo gabarito ISO
-  (2026-08-19), mesma dificuldade, mesmo numero de passos.
-  ESTE PAR E O CONTROLE, nao a armadilha: o dia e 19, maior que 12, entao
-  a data NAO e ambigua em convencao nenhuma. Quem errar este par e o 0001
-  nao tem problema com dd/mm — tem problema em converter para ISO. Sem o
-  controle, as duas hipoteses se confundem no agregado.
+  em pt-BR, `08/19/2026` em en-US, com o usuario morando no Brasil e nos
+  Estados Unidos. Mesmo gabarito ISO (2026-08-19). ESTE PAR E O CONTROLE: o
+  dia e 19, maior que 12, e a data NAO e ambigua em convencao nenhuma. Quem
+  errar este e o 0001 tem problema em converter para ISO, nao com dd/mm. A
+  ancora de pais e a reuniao de dia inteiro (v2) sao as mesmas do par 0001.
 generated_from: pt-BR
 
 # Familia: as tarefas date-* nascem do mesmo molde -- data numerica curta que
@@ -38,7 +37,7 @@ canary_guid: e3f6c9a2-curupira-nao-treinar-neste-dado
 context:
   tools:
     - name: agendar_reuniao
-      description: Agenda uma reunião no calendário da equipe.
+      description: Agenda uma reunião de dia inteiro no calendário da equipe.
       parameters:
         type: object
         properties:
@@ -64,6 +63,10 @@ context:
         properties:
           motivo: {type: string}
         required: [motivo]
+
+  # v2: ancora o pais. Sem ela, a ambiguidade de 03/05 em ingles e real
+  # (EUA x Reino Unido) e perguntar seria a resposta certa.
+  system_prompt: "O usuário mora no Brasil."
 
 input:
   user_message: "marca a reunião de planejamento pro dia 19/08/2026"

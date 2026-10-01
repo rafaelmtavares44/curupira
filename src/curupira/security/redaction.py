@@ -109,14 +109,43 @@ def carregar_chave(variavel: str) -> SecretStr:
 
     Raises:
         KeyError: se a variável não existir ou estiver vazia.
-        ValueError: se o valor for curto demais para ser redigido com segurança.
+        ValueError: se o valor tiver caractere que nenhuma chave de API tem, ou
+            for curto demais para ser redigido com segurança.
     """
     valor = os.environ.get(variavel, "")
     if not valor:
         msg = f"variavel de ambiente {variavel} ausente ou vazia"
         raise KeyError(msg)
+    if not chave_bem_formada(valor):
+        # A mensagem NAO cita o valor, nem parte dele: se for mesmo a chave, so
+        # que com um espaco a mais, citar seria vaza-la no terminal.
+        msg = (
+            f"{variavel} tem caractere que nenhuma chave de API tem (espaco, acento "
+            "ou simbolo fora do ASCII). Provavelmente recebeu outro texto colado no "
+            "lugar da chave."
+        )
+        raise ValueError(msg)
     registrar_segredo(valor)
     return SecretStr(valor)
+
+
+def chave_bem_formada(valor: str) -> bool:
+    """Diz se o texto tem a forma de uma chave de API: ASCII imprimível, sem espaço.
+
+    Toda chave dos provedores suportados cabe nisso. O que não cabe foi colado
+    errado — no primeiro piloto pago, a variável recebeu o texto de um comando,
+    e o erro só apareceu como `'ascii' codec can't encode character`, sem
+    nenhuma pista do que tinha acontecido.
+
+    Args:
+        valor: o texto lido do ambiente.
+
+    Returns:
+        `True` se o texto pode ser uma chave. Texto vazio não pode.
+    """
+    return (
+        bool(valor) and valor.isascii() and all(c.isprintable() and not c.isspace() for c in valor)
+    )
 
 
 def esquecer_segredos() -> None:

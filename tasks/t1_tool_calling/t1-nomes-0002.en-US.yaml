@@ -65,7 +65,7 @@ expect:
     args:
       convidado: Ana
     arg_specs:
-      convidado: &id001
+      convidado:
         matcher: fuzzy_name
         params:
           threshold: 0.9
@@ -74,11 +74,17 @@ expect:
     args:
       convidado: Bruno
     arg_specs:
-      convidado: *id001
+      convidado:
+        matcher: fuzzy_name
+        params:
+          threshold: 0.9
     extra_args: ignore
   - name: enviar_convite
     args:
       convidado: Carla
     arg_specs:
-      convidado: *id001
+      convidado:
+        matcher: fuzzy_name
+        params:
+          threshold: 0.9
     extra_args: ignore

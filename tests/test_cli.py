@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import httpx
 import polars as pl
 import pytest
 import yaml
@@ -34,6 +35,7 @@ from curupira.report.aggregate import MetricasDaTrilha, RelatorioDaRodada
 from tests.fabricas import par_strict, tarefa_bruta
 
 runner = CliRunner()
+CHAVE_FALSA = "sk-ant-chave-falsa-de-teste-sem-valor-nenhum"  # pragma: allowlist secret
 RAIZ_DO_PROJETO = Path(__file__).resolve().parent.parent
 
 
@@ -51,6 +53,42 @@ def _registro_limpo() -> Iterator[None]:
     limpar_registro()
     yield
     limpar_registro()
+
+
+class RedeFalsa:
+    """O provedor, de mentira: responde sempre o mesmo status e conta os pedidos.
+
+    Até a Entrega 22 estes testes diziam "sem rede" num comentário e mandavam a
+    chave falsa para `api.anthropic.com` de verdade — no CI, que tem rede, a
+    Anthropic respondia 401. O teste passava por acaso, e qualquer mudança no
+    tratamento de 401 o quebraria sem motivo aparente.
+    """
+
+    def __init__(self) -> None:
+        """Começa respondendo 503: falha transitória, que não interrompe a rodada."""
+        self.status = 503
+        self.pedidos = 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        """Atende um pedido sem sair da máquina."""
+        del request
+        self.pedidos += 1
+        corpo = {"type": "error", "error": {"type": "teste", "message": "rede falsa"}}
+        return httpx.Response(self.status, json=corpo)
+
+
+@pytest.fixture(autouse=True)
+def rede(monkeypatch: pytest.MonkeyPatch) -> RedeFalsa:
+    """Nenhum teste da CLI toca a rede: todo cliente HTTP usa a `RedeFalsa`."""
+    falsa = RedeFalsa()
+    original = httpx.AsyncClient
+
+    def cliente(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        kwargs["transport"] = httpx.MockTransport(falsa)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", cliente)
+    return falsa
 
 
 @pytest.fixture
@@ -357,7 +395,7 @@ def test_run_avisa_quando_a_seed_nao_sera_aplicada(dataset: Path, tmp_path: Path
 def test_run_com_provedor_que_ignora_seed_avisa(
     dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", "chave-falsa-so-para-o-aviso")
+    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", CHAVE_FALSA)
     comum = _congelar(dataset, tmp_path / "suites")
     resultado = runner.invoke(
         app,
@@ -380,7 +418,7 @@ def test_run_com_provedor_que_ignora_seed_avisa(
             *comum,
         ],
     )
-    # A rodada segue e falha nas chamadas (sem rede), mas o aviso tem que sair
+    # A rodada segue e falha nas chamadas (rede falsa, 503), mas o aviso tem que sair
     # ANTES — e sair junto com o resultado, nao no lugar dele.
     assert "nao aceita seed" in _saida(resultado)
 
@@ -389,7 +427,7 @@ def test_run_termina_em_1_quando_ha_erro_de_infraestrutura(
     dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Rodada com erro de provedor não pode sair 0 e parecer completa."""
-    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", "chave-falsa-sem-rede-nenhuma")
+    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", CHAVE_FALSA)
     comum = _congelar(dataset, tmp_path / "suites")
     saida = tmp_path / "runs"
     resultado = runner.invoke(
@@ -1059,3 +1097,204 @@ def test_errata_show_lista_o_que_foi_marcado(dataset: Path, congelado: Path) -> 
 
     assert resultado.exit_code == 0
     assert "revisao 1" in _saida(resultado)
+
+
+# --------------------------------------------------------------------------
+# O que o primeiro piloto pago ensinou (Entrega 22)
+# --------------------------------------------------------------------------
+
+
+def _run_anthropic(comum: list[str], saida: Path, *extras: str) -> Any:
+    return runner.invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "v0.1",
+            "--agent",
+            "x",
+            "--modelo",
+            "m",
+            "--provedor",
+            "anthropic",
+            "--saida",
+            str(saida),
+            *extras,
+            *comum,
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "colado",
+    [
+        # O que de fato aconteceu no piloto: o comando de conferencia colado no
+        # lugar da chave, com um "·" que estourou como 'ascii' codec error.
+        '"tamanho: " + $env:CURUPIRA_ANTHROPIC_API_KEY.Length + " · comeca com"',
+        "sk-ant-chave com espaco no meio",
+        "sk-ant-acentuação",
+    ],
+)
+def test_chave_com_caractere_impossivel_para_antes_de_chamar(
+    colado: str, dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rede: RedeFalsa
+) -> None:
+    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", colado)
+    resultado = _run_anthropic(_congelar(dataset, tmp_path / "suites"), tmp_path / "runs")
+
+    assert resultado.exit_code == 2
+    assert "caractere que nenhuma chave de API tem" in _saida(resultado)
+    assert colado not in resultado.output, "a mensagem nunca ecoa o que foi colado"
+    assert rede.pedidos == 0
+    assert not (tmp_path / "runs").exists()
+
+
+def test_chave_sem_o_prefixo_do_provedor_para_antes_de_chamar(
+    dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rede: RedeFalsa
+) -> None:
+    """Texto ASCII que não é chave: passa na forma, cai no prefixo."""
+    errada = "tamanho-121-comeca-com-tamanh"
+    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", errada)
+    resultado = _run_anthropic(_congelar(dataset, tmp_path / "suites"), tmp_path / "runs")
+
+    assert resultado.exit_code == 2
+    assert "comeca com 'sk-ant-'" in _saida(resultado)
+    assert "Nenhuma chamada foi feita" in _saida(resultado)
+    assert errada not in resultado.output
+    assert rede.pedidos == 0
+
+
+def test_run_para_no_primeiro_401(
+    dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rede: RedeFalsa
+) -> None:
+    """O piloto disparou 138 chamadas com uma chave inválida e ouviu 138 vezes 401."""
+    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", CHAVE_FALSA)
+    rede.status = 401
+    resultado = _run_anthropic(
+        _congelar(dataset, tmp_path / "suites"),
+        tmp_path / "runs",
+        "--repeticoes",
+        "3",
+        "--concorrencia",
+        "1",
+    )
+
+    assert resultado.exit_code == 1
+    assert "recusou a autenticacao (HTTP 401)" in _saida(resultado)
+    assert "CURUPIRA_ANTHROPIC_API_KEY" in _saida(resultado)
+    assert rede.pedidos == 1, "2 tarefas x 3 repeticoes = 6 chamadas; so a primeira saiu"
+
+    (rodada,) = (tmp_path / "runs").iterdir()
+    pontuado = runner.invoke(app, ["score", str(rodada), "--tarefas", str(dataset)])
+    assert pontuado.exit_code == 1, "o bruto parcial nao se pontua"
+    assert "rodada incompleta" in _saida(pontuado)
+    assert not (rodada / "scored.parquet").exists()
+
+
+def test_run_com_falha_transitoria_nao_para(
+    dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rede: RedeFalsa
+) -> None:
+    """503 é transitório: vira linha de erro em cada chamada, e a rodada termina."""
+    monkeypatch.setenv("CURUPIRA_ANTHROPIC_API_KEY", CHAVE_FALSA)
+    resultado = _run_anthropic(
+        _congelar(dataset, tmp_path / "suites"), tmp_path / "runs", "--repeticoes", "3"
+    )
+    assert resultado.exit_code == 1
+    assert rede.pedidos == 6
+    assert "recusou a autenticacao" not in _saida(resultado)
+
+
+def test_freeze_em_pasta_descartavel_respeita_as_suites_do_projeto(
+    raiz_do_repo: Path, tmp_path: Path
+) -> None:
+    """O defeito do piloto: congelar em pasta vazia tratava a v0.1 como livre.
+
+    O lint procurava as suítes congeladas na pasta de DESTINO. As tarefas
+    `money-*`, congeladas antes de várias convenções, reprovavam regras que no
+    projeto real não se aplicam a elas, e o congelamento falhava.
+    """
+    copia = tmp_path / "tasks"
+    shutil.copytree(raiz_do_repo / "tasks", copia)
+    descartavel = tmp_path / "descartavel"
+
+    resultado = runner.invoke(
+        app,
+        [
+            "suite",
+            "freeze",
+            "ensaio",
+            "--tarefas",
+            str(copia),
+            "--destino",
+            str(descartavel),
+            "--congeladas",
+            str(raiz_do_repo / "suites"),
+        ],
+    )
+
+    assert resultado.exit_code == 0, resultado.output
+    assert (descartavel / "ensaio.yaml").is_file()
+    assert not (raiz_do_repo / "suites" / "ensaio.yaml").exists(), "nada gravado no projeto"
+
+
+def test_freeze_sem_saber_das_congeladas_reprova_as_tarefas_antigas(
+    raiz_do_repo: Path, tmp_path: Path
+) -> None:
+    """O outro lado: apontando `--congeladas` para o vazio, o defeito volta.
+
+    Guarda que o teste acima passa pelo motivo certo, e não porque o lint parou
+    de olhar para as `money-*`.
+    """
+    copia = tmp_path / "tasks"
+    shutil.copytree(raiz_do_repo / "tasks", copia)
+    vazia = tmp_path / "vazia"
+    vazia.mkdir()
+
+    resultado = runner.invoke(
+        app,
+        [
+            "suite",
+            "freeze",
+            "ensaio",
+            "--tarefas",
+            str(copia),
+            "--destino",
+            str(vazia),
+            "--congeladas",
+            str(vazia),
+        ],
+    )
+
+    assert resultado.exit_code == 1
+    assert "esclarecimento-por-identificador" in _saida(resultado)
+
+
+def test_freeze_sem_dizer_onde_estao_as_congeladas_acha_as_irmas_das_tarefas(
+    raiz_do_repo: Path, tmp_path: Path
+) -> None:
+    """O comando do piloto, sem `--congeladas`: o padrao vem da pasta de tarefas.
+
+    `tasks/` e `suites/` sao irmas no projeto. O padrao nao depende do diretorio
+    corrente, que no pytest e a raiz do repositorio e no PowerShell e onde o
+    usuario estiver.
+    """
+    projeto = tmp_path / "projeto"
+    shutil.copytree(raiz_do_repo / "tasks", projeto / "tasks")
+    shutil.copytree(raiz_do_repo / "suites", projeto / "suites")
+    descartavel = tmp_path / "descartavel"
+
+    resultado = runner.invoke(
+        app,
+        [
+            "suite",
+            "freeze",
+            "ensaio",
+            "--tarefas",
+            str(projeto / "tasks"),
+            "--destino",
+            str(descartavel),
+        ],
+    )
+
+    assert resultado.exit_code == 0, resultado.output
+    assert (descartavel / "ensaio.yaml").is_file()
+    assert not (projeto / "suites" / "ensaio.yaml").exists()

@@ -140,6 +140,24 @@ terceira variante em vez de mudar o controle (`ferramenta-em-ingles` tem duas).
 - **Data relativa precisa de âncora.** Se o pedido diz "semana que vem", o
   `system_prompt` diz que dia é hoje — senão a lacuna é também a falta de
   relógio, e não só o dado que a tarefa quer testar.
+- **Data numérica precisa de país.** Se o pedido traz `dd/mm` ou `mm/dd`, o
+  `system_prompt` diz onde o usuário mora. Sem isso, `03/05/2026` em inglês é
+  ambíguo de verdade (EUA × Reino Unido), e perguntar é a resposta certa — o
+  primeiro piloto reprovou um modelo por ser cuidadoso (ADR 0013).
+
+### A ferramenta não deixa lacuna que a tarefa não quer testar
+
+O primeiro piloto achou três tarefas em que o agente cuidadoso reprovava por
+uma lacuna que não era o objeto delas (ADR 0013):
+
+- **Argumento com conjunto fechado de respostas é `enum`.** Um `server` livre
+  deixava o gabarito indefinido: o modelo nomeava o servidor de um jeito que a
+  lista do `one_of` não previa.
+- **A descrição diz para onde vai o que a ferramenta não tem campo.** Se o
+  pedido traz um horário e a ferramenta não tem campo de horário, a descrição
+  diz que ele vai no texto ("O momento de lembrar vai no próprio texto") ou que
+  não existe ("reunião de dia inteiro"). Senão, perguntar pelo horário é uso
+  defensável da abstenção.
 
 ## `family_id` é a unidade de reamostragem
 
@@ -173,6 +191,17 @@ qual tarefa. O lint `canario-unico` cobra isso.
 o resto dela muda. O repositório é público: a versão que já foi ao ar pode ter
 sido coletada com aquele GUID, e trocá-lo apagaria a capacidade de detectar
 justamente esse vazamento.
+
+## Tarefa que já foi rodada sobe `task_version` quando muda
+
+Antes do primeiro congelamento a tarefa pode mudar — mas, se ela já foi
+**rodada** (um piloto, por exemplo), o resultado daquela rodada está amarrado
+ao conteúdo antigo. A mudança sobe o `task_version`, e o hash recusa pontuar o
+bruto velho contra a tarefa nova. Mudança que não altera o conteúdo parseado
+(comentário, formatação do YAML) não sobe versão.
+
+O YAML do dataset não usa âncora nem alias (`&id001` / `*id001`): quem audita
+lê cada tarefa sozinha.
 
 ## Régua: matchers e validadores são nomes registrados
 

@@ -3,7 +3,7 @@
 # nao pela intencao, convida a Ana agora em vez de lembrar o usuario depois.
 id: t1-escolha-0001
 schema_version: 1
-task_version: 1
+task_version: 2
 track: t1_tool_calling
 locale: pt-BR
 split: public
@@ -27,7 +27,7 @@ canary_guid: bb419845-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: criar_lembrete
-    description: Cria um lembrete para o usuário.
+    description: Cria um lembrete para o usuário. O momento de lembrar vai no próprio texto.
     parameters:
       type: object
       properties:

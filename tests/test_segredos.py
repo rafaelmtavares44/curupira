@@ -24,6 +24,7 @@ from curupira.security import (
     FiltroDeRedacao,
     FormatadorDeRedacao,
     carregar_chave,
+    chave_bem_formada,
     instalar_redacao,
     redigir,
     registrar_segredo,
@@ -294,3 +295,50 @@ def test_carregar_chave_vazia_estoura(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CURUPIRA_CHAVE_DE_TESTE", "")
     with pytest.raises(KeyError):
         carregar_chave("CURUPIRA_CHAVE_DE_TESTE")
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "sk-ant-api03-AbC_dEf-123",
+        "sk-proj-XYZ789",
+    ],
+)
+def test_chave_bem_formada_aceita_chaves_reais_na_forma(texto: str) -> None:
+    assert chave_bem_formada(texto)
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "sk-ant-com espaco",
+        "sk-ant-\ttab",
+        "sk-ant-acentuação",
+        "sk-ant-·ponto",
+        "sk-ant-quebra\n",
+        "",
+    ],
+)
+def test_chave_bem_formada_recusa_o_que_nenhuma_chave_tem(texto: str) -> None:
+    assert not chave_bem_formada(texto)
+
+
+def test_carregar_chave_malformada_estoura_sem_citar_o_valor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Se for a chave com um espaço a mais, citá-la na mensagem seria vazá-la."""
+    colado = "sk-ant-quase-a-chave com-um-espaco"  # pragma: allowlist secret
+    monkeypatch.setenv("CURUPIRA_CHAVE_DE_TESTE", colado)
+
+    with pytest.raises(ValueError, match="caractere que nenhuma chave") as erro:
+        carregar_chave("CURUPIRA_CHAVE_DE_TESTE")
+    assert colado not in str(erro.value)
+    assert "quase-a-chave" not in str(erro.value)
+
+
+def test_chave_malformada_nao_e_registrada(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Recusada antes de registrar: o registro só guarda o que vai ser usado."""
+    monkeypatch.setenv("CURUPIRA_CHAVE_DE_TESTE", "sk-ant-com espaco-e-mais-texto")
+    with pytest.raises(ValueError):
+        carregar_chave("CURUPIRA_CHAVE_DE_TESTE")
+    assert _REGISTRO.segredos == ()

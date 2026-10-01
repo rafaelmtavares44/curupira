@@ -4,7 +4,7 @@
 # independente da Entrega 20.
 id: t1-ingles-0003
 schema_version: 1
-task_version: 1
+task_version: 2
 track: t1_tool_calling
 locale: pt-BR
 split: public
@@ -19,7 +19,8 @@ parity_notes: >-
   nomeada e descrita em INGLES nas duas versoes -- o objeto da familia e o
   usuario falando portugues com uma ferramenta em ingles. ESTE PAR E O SEGUNDO
   CONTROLE: 'baixa' / 'download', direcao pull, sem falso cognato. O servidor e
-  outro de proposito, para o gabarito diferir do da armadilha.
+  outro de proposito, para o gabarito diferir do da armadilha; 'staging', como
+  'backup', e dito sem traducao no jargao dev brasileiro.
 generated_from: pt-BR
 family_id: ferramenta-em-ingles
 variant_group: ingles-01
@@ -39,6 +40,9 @@ context:
           - pull
         server:
           type: string
+          enum:
+          - backup
+          - staging
       required:
       - direction
       - server
@@ -67,25 +71,17 @@ context:
       required:
       - motivo
 input:
-  user_message: baixa os dados do servidor de produção
+  user_message: baixa os dados do servidor de staging
 expect:
   kind: tool_call
   calls:
   - name: transfer_data
     args:
       direction: pull
-      server: producao
+      server: staging
     arg_specs:
       direction:
         matcher: exact_str
       server:
-        matcher: one_of
-        params:
-          values:
-          - produção
-          - servidor de produção
-          - production
-          - production server
-          - the production server
-          case_sensitive: false
+        matcher: exact_str
     extra_args: ignore

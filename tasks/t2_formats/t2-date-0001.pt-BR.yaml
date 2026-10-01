@@ -6,7 +6,7 @@
 # comparece a reuniao.
 id: t2-date-0001
 schema_version: 1
-task_version: 1
+task_version: 2
 
 track: t2_formats
 locale: pt-BR
@@ -18,13 +18,12 @@ pair_id: date-0001
 parity: strict
 parity_notes: >-
   Apenas o idioma e a convencao de data correspondente mudam: `05/03/2026`
-  em pt-BR, `03/05/2026` em en-US. Mesma ferramenta, mesmo gabarito ISO
-  (2026-03-05), mesma dificuldade, mesmo numero de passos.
-  SIMETRIA, ao contrario do par money-*: as duas versoes tem a MESMA
-  ambiguidade intrinseca, e o erro tipico leva ao MESMO valor errado,
-  2026-05-03. A assimetria que a ADR 0005 D3 teve de declarar no separador
-  decimal nao existe aqui, e e por isso que este e o par strict mais limpo
-  do dataset.
+  em pt-BR, `03/05/2026` em en-US, com o usuario morando no Brasil e nos
+  Estados Unidos. Mesmo gabarito ISO (2026-03-05). SIMETRIA, ao contrario do
+  par money-*: a ambiguidade intrinseca e o erro tipico (2026-05-03) sao os
+  mesmos nos dois lados. Desde a v2 o system_prompt ancora o pais: sem ele,
+  `03/05/2026` em ingles e ambiguo de verdade (EUA x Reino Unido), e
+  perguntar era a resposta certa -- o primeiro piloto mostrou isso.
 generated_from: pt-BR
 
 # Familia: as tarefas date-* nascem do mesmo molde -- data numerica curta que
@@ -40,7 +39,7 @@ canary_guid: c1f4a780-curupira-nao-treinar-neste-dado
 context:
   tools:
     - name: agendar_reuniao
-      description: Agenda uma reunião no calendário da equipe.
+      description: Agenda uma reunião de dia inteiro no calendário da equipe.
       parameters:
         type: object
         properties:
@@ -66,6 +65,10 @@ context:
         properties:
           motivo: {type: string}
         required: [motivo]
+
+  # v2: ancora o pais. Sem ela, a ambiguidade de 03/05 em ingles e real
+  # (EUA x Reino Unido) e perguntar seria a resposta certa.
+  system_prompt: "O usuário mora no Brasil."
 
 input:
   user_message: "marca a reunião de orçamento pro dia 05/03/2026"

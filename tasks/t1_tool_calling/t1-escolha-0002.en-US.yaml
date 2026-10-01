@@ -1,7 +1,7 @@
 # CONTROL for t1-escolha-0001, derived from the pt-BR task.
 id: t1-escolha-0002-en
 schema_version: 1
-task_version: 1
+task_version: 2
 track: t1_tool_calling
 locale: en-US
 split: public
@@ -24,7 +24,7 @@ canary_guid: 45c83a1a-curupira-nao-treinar-neste-dado
 context:
   tools:
   - name: criar_lembrete
-    description: Creates a reminder for the user.
+    description: Creates a reminder for the user. When to remind goes in the text itself.
     parameters:
       type: object
       properties:

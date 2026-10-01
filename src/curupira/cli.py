@@ -68,9 +68,11 @@ from curupira.report.aggregate import RelatorioDaRodada, agregar
 from curupira.report.delta import METODO_BCA
 from curupira.runner.executor import (
     ARQUIVO_DA_RODADA,
+    MARCA_DE_INCOMPLETA,
     NOME_DO_BRUTO,
     ContextoDaRodada,
     ErroDeSeguranca,
+    RodadaInterrompida,
     executar_suite,
     identidade,
     ler_bruto,
@@ -132,6 +134,18 @@ costuma estar exportada na sessao inteira do desenvolvedor. Quem roda o
 benchmark declara, num gesto explicito, qual chave vai ser gasta.
 """
 
+PREFIXO_DA_CHAVE: Final = {
+    "anthropic": "sk-ant-",
+    "openai": "sk-",
+}
+"""Como toda chave de cada provedor comeca.
+
+Conferido ANTES da primeira chamada. No primeiro piloto pago a variavel recebeu
+o texto de um comando colado no lugar da chave, e o defeito so apareceu depois
+de 138 chamadas recusadas. Prefixo publico: dizer qual e o esperado nao revela
+nada da chave de ninguem.
+"""
+
 
 class Provedor(StrEnum):
     """Provedores que o `run` sabe instanciar.
@@ -181,10 +195,21 @@ def _chave_do_provedor(provedor: Provedor) -> SecretStr:
     if variavel is None:
         return SecretStr("")
     try:
-        return carregar_chave(variavel)
+        chave = carregar_chave(variavel)
     except (KeyError, ValueError) as falha:
-        erro_console.print(f"chave indisponivel: {falha}", style="red")
+        erro_console.print(f"chave indisponivel: {falha}", style="red", markup=False)
         raise typer.Exit(code=CODIGO_DE_USO) from falha
+    prefixo = PREFIXO_DA_CHAVE.get(provedor.value, "")
+    if not chave.get_secret_value().startswith(prefixo):
+        erro_console.print(
+            f"a chave em {variavel} nao tem o formato de chave da {provedor.value}: "
+            f"toda chave dela comeca com '{prefixo}'. Provavelmente a variavel "
+            "recebeu outro texto colado no lugar da chave. Nenhuma chamada foi feita.",
+            style="red",
+            markup=False,
+        )
+        raise typer.Exit(code=CODIGO_DE_USO)
+    return chave
 
 
 def _sha256_do_arquivo(caminho: Path) -> str:
@@ -287,19 +312,58 @@ def validate(
         raise typer.Exit(code=1)
 
 
+def _suites_conhecidas(*diretorios: Path) -> list[Suite]:
+    """As suites congeladas de varios diretorios, sem repetir o mesmo diretorio.
+
+    Args:
+        diretorios: os diretorios a ler; ausentes sao ignorados.
+
+    Returns:
+        Todas as suites encontradas, na ordem dos diretorios.
+    """
+    vistos: set[Path] = set()
+    suites: list[Suite] = []
+    for diretorio in diretorios:
+        real = diretorio.resolve()
+        if real in vistos:
+            continue
+        vistos.add(real)
+        suites.extend(carregar_suites(diretorio))
+    return suites
+
+
 @suite_app.command("freeze")
 def suite_freeze(
     identificador: Annotated[str, typer.Argument(help="Id da nova suite, ex.: v0.1.")],
     tarefas: Annotated[Path, typer.Option(help="Raiz do dataset.")] = Path("tasks"),
-    destino: Annotated[Path, typer.Option(help="Diretorio das suites.")] = Path("suites"),
+    destino: Annotated[Path, typer.Option(help="Onde gravar a suite nova.")] = Path("suites"),
+    congeladas: Annotated[
+        Path | None,
+        typer.Option(
+            help="Onde estao as suites ja congeladas do projeto. Padrao: a pasta "
+            "suites/ ao lado da pasta de tarefas."
+        ),
+    ] = None,
 ) -> None:
     """Congela uma suite: id, task_version e sha256 de cada tarefa.
 
     Recusa congelar um dataset com erro de lint, e recusa sobrescrever uma suite
     que ja existe. As duas recusas sao o ponto: uma suite congelada que muda nao
     e uma suite congelada.
+
+    `--destino` e `--congeladas` sao coisas diferentes, e ate a Entrega 22 eram
+    uma so: congelar uma suite de ensaio numa pasta descartavel fazia o lint
+    procurar as suites congeladas NESSA pasta, vazia, e tratar as tarefas da v0.1
+    como livres. O que ja foi congelado mora em `suites/`, onde quer que a suite
+    nova seja gravada.
+
+    O padrao de `--congeladas` sai da pasta de tarefas, e nao do diretorio
+    corrente: `tasks/` e `suites/` sao irmas no projeto, e quem roda o comando de
+    outra pasta continua lendo as suites certas.
     """
     _preparar_registro()
+    if congeladas is None:
+        congeladas = tarefas.resolve().parent / "suites"
     caminho = destino / f"{identificador}.yaml"
     if caminho.exists():
         erro_console.print(
@@ -310,7 +374,9 @@ def suite_freeze(
         raise typer.Exit(code=CODIGO_DE_USO)
 
     carregadas = list(carregar_diretorio(tarefas))
-    problemas = lint_do_dataset(carregadas, estrito=False, suites=carregar_suites(destino))
+    problemas = lint_do_dataset(
+        carregadas, estrito=False, suites=_suites_conhecidas(congeladas, destino)
+    )
     if tem_erro(problemas):
         _imprimir(problemas)
         erro_console.print(
@@ -438,6 +504,15 @@ def run(
                 concorrencia=concorrencia,
             )
         )
+    except RodadaInterrompida as falha:
+        variavel = VARIAVEL_DA_CHAVE.get(provedor.value, "a variavel da chave")
+        erro_console.print(
+            f"{falha}\n  confira a chave em {variavel}: invalida, revogada ou sem "
+            "permissao para este modelo.",
+            style="red",
+            markup=False,
+        )
+        raise typer.Exit(code=1) from falha
     except (ValueError, ErroDeSeguranca) as falha:
         erro_console.print(str(falha), style="red", markup=False)
         raise typer.Exit(code=1) from falha
@@ -529,13 +604,22 @@ def score(
 
     Recusa pontuar se o hash de alguma tarefa divergir do que a rodada usou. A
     resposta seria de uma pergunta e o gabarito de outra, e o numero sairia com
-    aparencia perfeitamente normal.
+    aparencia perfeitamente normal. Recusa tambem a rodada que nao terminou.
     """
     _preparar_registro()
     bruto = rodada / NOME_DO_BRUTO
     if not bruto.is_file():
         erro_console.print(f"bruto nao encontrado: {bruto}", style="red")
         raise typer.Exit(code=CODIGO_DE_USO)
+    if (rodada / MARCA_DE_INCOMPLETA).exists():
+        erro_console.print(
+            f"rodada incompleta: {rodada} tem a marca {MARCA_DE_INCOMPLETA}, entao a "
+            "rodada parou antes do fim. Um bruto parcial nao se pontua: o numero "
+            "sairia sobre um subconjunto de tarefas que ninguem escolheu. Rode de novo.",
+            style="red",
+            markup=False,
+        )
+        raise typer.Exit(code=1)
 
     carregadas = _dataset(tarefas)
     try:

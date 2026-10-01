@@ -33,9 +33,11 @@ from curupira.core.task import DefinicaoDeFerramenta, Tarefa
 from curupira.formatos import registrar_validadores
 from curupira.matchers import registrar_todos
 from curupira.runner.executor import (
+    MARCA_DE_INCOMPLETA,
     NOME_DO_BRUTO,
     ContextoDaRodada,
     ErroDeSeguranca,
+    RodadaInterrompida,
     executar_repeticao,
     executar_suite,
     identidade,
@@ -432,6 +434,7 @@ async def test_a_falha_de_uma_corrotina_nao_trava_o_escritor(
                 await _rodar(suite, tarefas, tmp_path / "rodada", adaptador=Vazador())
     finally:
         esquecer_segredos()
+    assert (tmp_path / "rodada" / MARCA_DE_INCOMPLETA).is_file()
 
 
 @pytest.mark.asyncio
@@ -446,3 +449,101 @@ async def test_politica_nunca_chama_nao_produz_chamada(
         adaptador=AdaptadorFalso(Politica.NUNCA_CHAMA),
     )
     assert all(e.raw is not None and e.raw.tool_calls == () for e in execucoes)
+
+
+# --------------------------------------------------------------------------
+# Parar na primeira recusa de autenticacao (Entrega 22)
+# --------------------------------------------------------------------------
+
+
+class _Recusado(AdaptadorFalso):
+    """Responde todo pedido com o mesmo erro do provedor, e conta os pedidos."""
+
+    def __init__(self, status: int | None) -> None:
+        super().__init__()
+        self.status = status
+        self.pedidos = 0
+
+    async def completar(
+        self,
+        requisicao: RequisicaoPreparada,
+        *,
+        chave: SecretStr,
+        cliente: httpx.AsyncClient,
+    ) -> RespostaCrua:
+        del requisicao, chave, cliente
+        self.pedidos += 1
+        await asyncio.sleep(0)
+        raise ErroDoProvedor("recusado", self.status, "invalid x-api-key")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_recusa_de_autenticacao_para_a_rodada_na_primeira(
+    suite: Suite, tarefas: dict[str, Tarefa], tmp_path: Path, status: int
+) -> None:
+    """O piloto de 01/10 pagou (em tempo) 138 vezes o mesmo 401.
+
+    Com concorrência 1 a recusa é vista antes da segunda chamada: exatamente um
+    pedido sai. O bruto parcial fica, com a linha de erro, para inspeção.
+    """
+    adaptador = _Recusado(status)
+    destino = tmp_path / "rodada"
+
+    with pytest.raises(RodadaInterrompida) as erro:
+        await _rodar(suite, tarefas, destino, adaptador=adaptador, repeticoes=3)
+
+    assert adaptador.pedidos == 1
+    assert erro.value.status == status
+    assert erro.value.bruto == destino / NOME_DO_BRUTO
+    linhas = ler_bruto(erro.value.bruto)
+    assert len(linhas) == 1
+    assert linhas[0].erro is not None and str(status) in linhas[0].erro
+    assert (destino / MARCA_DE_INCOMPLETA).is_file(), "o score precisa saber que parou"
+
+
+@pytest.mark.asyncio
+async def test_recusa_com_concorrencia_desperdica_no_maximo_um_lote(
+    suite: Suite, tarefas: dict[str, Tarefa], tmp_path: Path
+) -> None:
+    """Pedidos já em voo quando a recusa chega não são cancelados; novos não saem."""
+    adaptador = _Recusado(401)
+    concorrencia = 4
+    total = len(tarefas) * 5
+
+    with pytest.raises(RodadaInterrompida):
+        await _rodar(
+            suite,
+            tarefas,
+            tmp_path / "rodada",
+            adaptador=adaptador,
+            repeticoes=5,
+            concorrencia=concorrencia,
+        )
+
+    assert 1 <= adaptador.pedidos <= concorrencia < total
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [429, 500, 529, None])
+async def test_falha_transitoria_nao_para_a_rodada(
+    suite: Suite, tarefas: dict[str, Tarefa], tmp_path: Path, status: int | None
+) -> None:
+    """Sobrecarga e limite de taxa passam; cada um vira linha de erro, como antes."""
+    adaptador = _Recusado(status)
+
+    execucoes = await _rodar(suite, tarefas, tmp_path / "rodada", adaptador=adaptador, repeticoes=2)
+
+    assert adaptador.pedidos == len(tarefas) * 2
+    assert len(execucoes) == len(tarefas) * 2
+    assert all(e.erro is not None for e in execucoes)
+
+
+@pytest.mark.asyncio
+async def test_rodada_completa_nao_deixa_a_marca_de_incompleta(
+    suite: Suite, tarefas: dict[str, Tarefa], tmp_path: Path
+) -> None:
+    destino = tmp_path / "rodada"
+    await _rodar(suite, tarefas, destino, repeticoes=2)
+    assert (destino / NOME_DO_BRUTO).is_file()
+    assert not (destino / MARCA_DE_INCOMPLETA).exists()

@@ -47,7 +47,7 @@ from curupira.adapters.base import (
     ParametrosDeAmostragem,
 )
 from curupira.core.hashing import hash_da_tarefa
-from curupira.core.io import acrescentar_linhas
+from curupira.core.io import acrescentar_linhas, gravar_texto
 from curupira.core.result import ExecucaoCrua, IdentidadeDoAgente, RespostaCrua
 from curupira.core.suite import Suite, verificar_suite
 from curupira.core.task import Tarefa
@@ -64,7 +64,74 @@ português", "use as ferramentas" — seria uma variável nossa dentro do númer
 Um template diferente é um **agente diferente**, com id próprio no leaderboard.
 """
 
+STATUS_DE_AUTENTICACAO: Final = frozenset({401, 403})
+"""Recusas do provedor que nao melhoram na tentativa seguinte.
+
+Chave invalida, revogada ou sem permissao: a segunda chamada falha igual a
+primeira. Sao as unicas que interrompem a rodada. Um 429 ou um 529 sao
+transitorios e continuam virando linha de erro, como sempre.
+"""
+
+
+class SinalDeRecusa:
+    """A primeira recusa de autenticacao da rodada, compartilhada entre corrotinas.
+
+    Um atributo simples basta: as corrotinas rodam num laco de eventos so, e a
+    escrita acontece entre dois `await`, nunca no meio de um.
+    """
+
+    def __init__(self) -> None:
+        """Comeca sem recusa."""
+        self.status: int | None = None
+
+    def recusar(self, status: int) -> None:
+        """Registra a recusa. So a primeira conta: e ela que interrompe."""
+        if self.status is None:
+            self.status = status
+
+    @property
+    def recusada(self) -> bool:
+        """Se alguma chamada da rodada ja foi recusada."""
+        return self.status is not None
+
+
+class RodadaInterrompida(RuntimeError):
+    """O provedor recusou a autenticacao, e a rodada parou na primeira recusa.
+
+    Existe porque o primeiro piloto pago (01/10/2026) disparou as 138 chamadas da
+    suite com uma chave invalida, e recebeu 138 vezes o mesmo 401. Com uma chave
+    valida mas com limite de gasto, o mesmo defeito queimaria orcamento a toa.
+    """
+
+    def __init__(self, status: int, bruto: Path) -> None:
+        """Monta o erro.
+
+        Args:
+            status: o codigo HTTP da recusa.
+            bruto: o `raw.jsonl` parcial, para quem quiser inspecionar.
+        """
+        self.status = status
+        self.bruto = bruto
+        super().__init__(
+            f"o provedor recusou a autenticacao (HTTP {status}) e a rodada parou na "
+            "primeira recusa, em vez de repetir a mesma chamada condenada para cada "
+            f"tarefa. O bruto parcial ficou em {bruto}, marcado como incompleto, e o "
+            "`score` recusa pontua-lo."
+        )
+
+
 NOME_DO_BRUTO: Final = "raw.jsonl"
+MARCA_DE_INCOMPLETA: Final = "INCOMPLETA"
+"""Arquivo que existe enquanto a rodada nao termina.
+
+Criado antes da primeira chamada e apagado so quando a ultima linha foi gravada
+sem recusa. Uma rodada interrompida -- 401, erro de seguranca, Ctrl+C, queda de
+energia -- deixa a marca, e o `score` recusa pontuar o bruto parcial: o numero
+sairia sobre um subconjunto de tarefas que ninguem escolheu.
+
+O caminho MCP (`curupira serve`) nao cria a marca: cada sessao grava uma
+execucao completa.
+"""
 ARQUIVO_DA_RODADA: Final = "rodada.json"
 
 
@@ -153,6 +220,7 @@ async def executar_repeticao(
     chave: SecretStr,
     cliente: httpx.AsyncClient,
     repeticao: int,
+    interromper: SinalDeRecusa | None = None,
 ) -> ExecucaoCrua:
     """Executa UMA repetição de UMA tarefa e devolve a linha bruta.
 
@@ -164,6 +232,8 @@ async def executar_repeticao(
         chave: a chave de API.
         cliente: cliente HTTP reusado.
         repeticao: o índice da repetição, a partir de zero.
+        interromper: sinalizado aqui quando o provedor recusa a autenticação,
+            para a rodada não disparar as chamadas restantes.
 
     Returns:
         A execução crua, com resposta ou com erro de infraestrutura.
@@ -210,6 +280,12 @@ async def executar_repeticao(
             resposta = await adaptador.completar(requisicao, chave=chave, cliente=cliente)
         except ErroDoProvedor as falha:
             erro = str(falha)
+            if (
+                interromper is not None
+                and falha.status is not None
+                and falha.status in STATUS_DE_AUTENTICACAO
+            ):
+                interromper.recusar(falha.status)
         decorrido = round((perf_counter() - inicio) * 1000)
         if resposta is not None and contexto.cache is not None:
             gravar(contexto.cache, marca, resposta)
@@ -241,6 +317,7 @@ async def executar_tarefa(
     cliente: httpx.AsyncClient,
     fila: asyncio.Queue[ExecucaoCrua | None],
     repeticoes: int,
+    interromper: SinalDeRecusa | None = None,
 ) -> None:
     """Executa uma tarefa N vezes e publica cada resposta crua na fila.
 
@@ -263,8 +340,11 @@ async def executar_tarefa(
         cliente: cliente HTTP reusado.
         fila: a fila do escritor único.
         repeticoes: quantas vezes repetir.
+        interromper: quando sinalizado, as repetições restantes não começam.
     """
     for repeticao in range(repeticoes):
+        if interromper is not None and interromper.recusada:
+            return
         execucao = await executar_repeticao(
             tarefa,
             adaptador,
@@ -273,6 +353,7 @@ async def executar_tarefa(
             chave=chave,
             cliente=cliente,
             repeticao=repeticao,
+            interromper=interromper,
         )
         await fila.put(execucao)
 
@@ -381,12 +462,19 @@ async def executar_suite(
         raise ValueError(msg)
 
     saida.mkdir(parents=True, exist_ok=True)
+    marca = saida / MARCA_DE_INCOMPLETA
+    gravar_texto(
+        marca, "Esta rodada nao terminou. O raw.jsonl ao lado e parcial e nao se pontua.\n"
+    )
     fila: asyncio.Queue[ExecucaoCrua | None] = asyncio.Queue()
     escritor = asyncio.create_task(_escrever(fila, bruto))
     limite = asyncio.Semaphore(concorrencia)
+    recusa = SinalDeRecusa()
 
     async def _uma(tarefa: Tarefa) -> None:
         async with limite:
+            if recusa.recusada:
+                return
             await executar_tarefa(
                 tarefa,
                 adaptador,
@@ -396,6 +484,7 @@ async def executar_suite(
                 cliente=cliente,
                 fila=fila,
                 repeticoes=repeticoes,
+                interromper=recusa,
             )
 
     alvos: Sequence[Tarefa] = tarefas_da_suite(suite, tarefas)
@@ -407,6 +496,11 @@ async def executar_suite(
         await fila.put(None)
         await escritor
 
+    if recusa.status is not None:
+        # As chamadas que ja estavam no ar quando a recusa chegou terminaram e
+        # foram gravadas -- no maximo `concorrencia` delas. Nenhuma outra comecou.
+        raise RodadaInterrompida(recusa.status, bruto)
+    marca.unlink()
     return bruto
 
 
