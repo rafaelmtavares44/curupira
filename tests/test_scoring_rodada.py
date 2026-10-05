@@ -18,6 +18,7 @@ import pytest
 
 from curupira.core.enums import CamadaDePontuacao, ClasseDeFalha, Desfecho, Locale
 from curupira.core.hashing import hash_da_tarefa
+from curupira.core.loader import carregar_diretorio
 from curupira.core.registry import limpar_registro
 from curupira.core.result import (
     ChamadaObservada,
@@ -256,3 +257,24 @@ def test_o_motivo_gravado_passa_pela_redacao(tmp_path: Path) -> None:
         gravar_pontuado([resultado], tmp_path / "r")
     finally:
         esquecer_segredos()
+
+
+def test_recusar_na_irrelevancia_passa_e_e_abstencao_correta() -> None:
+    """O caso do segundo piloto, com a tarefa real: o modelo recusou e passou.
+
+    A taxonomia saía `ABSTENCAO_INDEVIDA`, e a métrica de abstenção indevida
+    contava como defeito o comportamento que o pontuador declara correto.
+    """
+    raiz = Path(__file__).resolve().parent.parent / "tasks"
+    (tarefa,) = [t for t in carregar_diretorio(raiz) if t.id == "t1-irrelevancia-0001"]
+    assert tarefa.expect.kind == "no_tool_call"
+    recusa = RespostaCrua(
+        text=None,
+        tool_calls=(ChamadaObservada(name="recusar", args={"motivo": "nao ha ferramenta"}),),
+        finish_reason="tool_use",
+    )
+
+    resultado = pontuar_execucao(_execucao(tarefa, raw=recusa), tarefa)
+
+    assert resultado.outcome is Desfecho.PASSOU
+    assert resultado.failure_class is ClasseDeFalha.ABSTENCAO_CORRETA

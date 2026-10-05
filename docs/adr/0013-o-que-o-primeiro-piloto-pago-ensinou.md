@@ -1,6 +1,7 @@
 # ADR 0013 — O que o primeiro piloto pago ensinou
 
-- **Status:** aceita
+- **Status:** aceita. A leitura da `anafora` ("específica de português") foi
+  corrigida pela ADR 0014 D2: o segundo piloto não a sustentou.
 - **Data:** 2026-10-01
 - **Contexto de:** Entregas 21 (piloto) e 22 (consertos)
 - **Relacionada a:** ADR 0005, ADR 0008, ADR 0010, ADR 0012

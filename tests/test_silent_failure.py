@@ -187,10 +187,21 @@ def test_abstencao_indevida() -> None:
     assert _classificar(Desfecho.FALHOU, resposta) is ClasseDeFalha.ABSTENCAO_INDEVIDA
 
 
-def test_abstencao_vence_o_desfecho() -> None:
-    """Quem chamou `recusar` se absteve, tenha passado ou não na régua da tarefa."""
+def test_abstencao_que_o_pontuador_aceitou_e_correta() -> None:
+    """O classificador não contradiz o pontuador (Entrega 24, segundo piloto).
+
+    Na irrelevância, recusar passa. Até a Entrega 24 este teste afirmava o
+    contrário -- "a abstenção vence o desfecho" --, e a mesma repetição saía
+    `PASSOU` e `ABSTENCAO_INDEVIDA` ao mesmo tempo.
+    """
     resposta = RespostaCrua(text="nao da", tool_calls=(RECUSOU,))
-    assert _classificar(Desfecho.PASSOU, resposta) is ClasseDeFalha.ABSTENCAO_INDEVIDA
+    assert _classificar(Desfecho.PASSOU, resposta) is ClasseDeFalha.ABSTENCAO_CORRETA
+
+
+def test_abstencao_que_reprovou_sem_ser_esperada_continua_indevida() -> None:
+    """O conserto não pode abrir a porta para quem sempre se abstém."""
+    resposta = RespostaCrua(text="nao da", tool_calls=(RECUSOU,))
+    assert _classificar(Desfecho.FALHOU, resposta) is ClasseDeFalha.ABSTENCAO_INDEVIDA
 
 
 def test_erro_de_infraestrutura_nao_e_erro_do_agente() -> None:

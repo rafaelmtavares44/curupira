@@ -218,14 +218,25 @@ def classificar(
 
     1. Erro de infraestrutura não é erro do agente — sai antes de tudo.
     2. Abstenção é decidida pela ferramenta chamada, não pelo texto. Se era
-       esperada, é acerto; se não era, é `ABSTENCAO_INDEVIDA` — e essa é a
-       métrica que impede o benchmark de premiar quem nunca arrisca.
+       esperada, ou se o pontuador a aceitou (o desfecho é `PASSOU`), é
+       `ABSTENCAO_CORRETA`; senão, é `ABSTENCAO_INDEVIDA` — e essa é a métrica
+       que impede o benchmark de premiar quem nunca arrisca.
+
+    O classificador não contradiz o pontuador. Na detecção de irrelevância
+    (`no_tool_call`), recusar é acerto: o pontuador diz `PASSOU`. Até a Entrega
+    24 a mesma repetição saía classificada `ABSTENCAO_INDEVIDA`, e o segundo
+    piloto mostrou o efeito: a taxa de abstenção indevida do modelo
+    intermediário na T1 saía 12,1% em vez de 7,6%. Desde a ADR 0012 D1,
+    abster-se e agir na mesma resposta reprova, então `PASSOU` com abstenção
+    só acontece onde a abstenção foi aceita.
     3. Só então acerto e erro do conteúdo, e o erro se divide por hedge.
 
     Args:
         desfecho: passou, falhou, absteve ou erro de execução.
         resposta: a resposta crua do modelo.
         abstencao_era_esperada: verdadeiro em tarefas `clarify` e `refusal`.
+            Em `no_tool_call` a abstenção não é esperada, mas é aceita: quem
+            decide é o desfecho.
         locale: o idioma, para o léxico de hedge.
 
     Returns:
@@ -238,11 +249,8 @@ def classificar(
     # o agente perguntou em texto livre. Conta como abstencao do mesmo jeito, mas
     # esse caminho e o assimetrico entre idiomas — o relatorio separa pela camada.
     if desfecho is Desfecho.ABSTEVE or houve_abstencao(resposta.tool_calls):
-        return (
-            ClasseDeFalha.ABSTENCAO_CORRETA
-            if abstencao_era_esperada
-            else ClasseDeFalha.ABSTENCAO_INDEVIDA
-        )
+        aceita = abstencao_era_esperada or desfecho is Desfecho.PASSOU
+        return ClasseDeFalha.ABSTENCAO_CORRETA if aceita else ClasseDeFalha.ABSTENCAO_INDEVIDA
 
     if desfecho is Desfecho.PASSOU:
         return ClasseDeFalha.ACERTO_CONFIANTE

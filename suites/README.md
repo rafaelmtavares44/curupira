@@ -16,4 +16,12 @@ Uma suíte lista `task_id` + `task_version` + `sha256` de cada tarefa, com
 PT-BR. Ela é declarada, não derivada: a base do Delta é cota de autoria, não
 o que sobrou.
 
-*(Nenhuma suíte congelada ainda. A v0.1 é congelada quando T1 e T2 fecharem.)*
+## Suítes
+
+| suíte | congelada em | tarefas | pares no Delta | famílias | nota |
+|---|---|---|---|---|---|
+| `v0.1` | 16/09/2026 | 4 | 2 | 1 | só o separador decimal (`money-*`); o Delta dela não tem BCa |
+| `v0.2` | 05/10/2026 | 46 | 23 | 11 | T1, T2 e T4; validada por dois pilotos pagos (ADR 0013 e 0014) |
+
+As quatro `money-*` estão nas duas: tarefa congelada não muda, então o hash é o
+mesmo. O que a v0.2 acrescenta são as 42 tarefas do lote das Entregas 19 a 22.

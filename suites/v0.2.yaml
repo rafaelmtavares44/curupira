@@ -1,0 +1,166 @@
+id: v0.2
+frozen_at: '2026-10-05T13:38:54.172075Z'
+curupira_version: 0.1.0.dev0
+entries:
+- task_id: t1-anafora-0001
+  task_version: 1
+  sha256: ebef0680ffc289400931e8bd953421d05772fe73209b444b2467cdaaba939942
+- task_id: t1-anafora-0001-en
+  task_version: 1
+  sha256: 65d90cd232e76e1999af0f109e1c5943a0e4a2bb48a8654130045192a62bc3a7
+- task_id: t1-anafora-0002
+  task_version: 1
+  sha256: f18015b3492302b93c324ae4c68e1ffead8f79354a18eb31f55da089ef5efdeb
+- task_id: t1-anafora-0002-en
+  task_version: 1
+  sha256: 1edbffc1309bea4aaa4af0174fe05dfa206c3398c4d7eb29be286b6abd7b5ee0
+- task_id: t1-escolha-0001
+  task_version: 2
+  sha256: 30f24d58250818b017d1cb61efaa683181725d55c7b63bf7aad8a10f695a95af
+- task_id: t1-escolha-0001-en
+  task_version: 2
+  sha256: f8f9d7acd97993c50e7dd284d68533ae0d6a39bcbd29686830125468e9bb4bdf
+- task_id: t1-escolha-0002
+  task_version: 2
+  sha256: b491ef5d78051dce5691a6b3898dd24fb18b26d725e1c4e021e9b024d5a22809
+- task_id: t1-escolha-0002-en
+  task_version: 2
+  sha256: fd0284da36f73f6046ac969745d197dd03b13cee3c6bded9c4f91cc61ac80d1d
+- task_id: t1-ingles-0001
+  task_version: 2
+  sha256: bd8dcb25280b64062fedb632cf0b06a1da95e2028f91b2d06179d3eda8973785
+- task_id: t1-ingles-0001-en
+  task_version: 2
+  sha256: 456fa6a8704307b3c7f1cd8c66d41923f4007456d6389dfd8daa764d2c3fd722
+- task_id: t1-ingles-0002
+  task_version: 2
+  sha256: fd1abb6ee8e8b4b5c57ba120a242e735bb873304015ad37357c0266ad9d37a38
+- task_id: t1-ingles-0002-en
+  task_version: 2
+  sha256: e283bbfb654cff4e111acef79d78155ed2bee139e389b3e914102b637f7b676d
+- task_id: t1-ingles-0003
+  task_version: 2
+  sha256: 1e61a69445a23939fc6a559d0dc56c1ec1b33d982822188361163f40eb07f10e
+- task_id: t1-ingles-0003-en
+  task_version: 2
+  sha256: 280d8887e74d5ed34780f6b3ff53db2ea16acdea18fef04384b532688cf2ae2c
+- task_id: t1-irrelevancia-0001
+  task_version: 1
+  sha256: 8970bbcf292bb458379559bfa7f6517ffaac0c9c58b637100577cde7890f6e6c
+- task_id: t1-irrelevancia-0001-en
+  task_version: 1
+  sha256: b0701a9185aa3f0cddf6eb7f419d732f8a59da0c61c9d04cfcb3bcccd61e834d
+- task_id: t1-irrelevancia-0002
+  task_version: 1
+  sha256: 7ce128d14448200523139f7c1b08023f15a561eb3eb81c8e7f2bb6b18b39b746
+- task_id: t1-irrelevancia-0002-en
+  task_version: 1
+  sha256: b1dfd88591da6f4fc8506c7b1f3f15d710b29ed20225a6e69512adf649604470
+- task_id: t1-nomes-0001
+  task_version: 1
+  sha256: 7090fb7f2b8601384b73ec438f53b5a7f74ed0533473acba9b905fd9c31783b8
+- task_id: t1-nomes-0001-en
+  task_version: 1
+  sha256: 2e5cb4be87d0bff691a3cda5368a318483d9eb99163b193f50492a6d456ecbf3
+- task_id: t1-nomes-0002
+  task_version: 1
+  sha256: e9e658fec5a9a82fdcff9167590c13071baed25b2ba98567eb1b537e3d5498bc
+- task_id: t1-nomes-0002-en
+  task_version: 1
+  sha256: c9c3e9ee29ef811b117986028f5ec72c2cf251088c5e3d31c0d138144c6de905
+- task_id: t2-date-0001
+  task_version: 2
+  sha256: d6e04b2d2234377f3cac964a04acc279016e0158833d29de36fc01bf6b367f80
+- task_id: t2-date-0001-en
+  task_version: 2
+  sha256: a0f9d23f944ffb3b4a4788a4e6600adf69d4b923e64c92284bc531b135892828
+- task_id: t2-date-0002
+  task_version: 2
+  sha256: b0ca7fa5fd6fdd3a664f78a4d78dd8a9c95d4bc336316d76525fbac7a5b5a255
+- task_id: t2-date-0002-en
+  task_version: 2
+  sha256: ff8ab8bd5b27e34333cac4c95f6f20e98cbdf2f17371139929527b81b368d41f
+- task_id: t2-hora-0001
+  task_version: 1
+  sha256: 2b5f19ca9091d94d5a1d9519429b77d7854aef09df2e8998bbc2c1ddfa1ea7aa
+- task_id: t2-hora-0001-en
+  task_version: 1
+  sha256: 179f73c5e5509097c23a907e270100df99b4df29ff139294c496fc72a7afbd2c
+- task_id: t2-hora-0002
+  task_version: 1
+  sha256: 0fa35c22c3bf04cf61edd9443989bc136727722164f94f6173d3680286be9b59
+- task_id: t2-hora-0002-en
+  task_version: 1
+  sha256: 1034618ea08e918c98af037cc9c969d3f02eac67de3a268fe29335ed0c70fd01
+- task_id: t2-money-0001
+  task_version: 3
+  sha256: 0e865d53cfb7517718f34a1c7007764cba7b629a580cc0310af79665e8da9a80
+- task_id: t2-money-0001-en
+  task_version: 3
+  sha256: 48feb00bed9c866f4d4ff896b6ada920c2175e440aa8e5fb5fc98258aa83de84
+- task_id: t2-money-0002
+  task_version: 3
+  sha256: b6011c6f050c8ef133690655ff680b4642e1aeeef37e6cf2ee4f6ccabad95fef
+- task_id: t2-money-0002-en
+  task_version: 3
+  sha256: cbb1f1d99586839cfb692a132a1df694413135360ed513da85c99f77e017fa56
+- task_id: t4-extenso-0001
+  task_version: 1
+  sha256: e4bb1a786d2bac9cf9d83b53dca03b85fa11cb5be901d0c56f261986786b669d
+- task_id: t4-extenso-0001-en
+  task_version: 1
+  sha256: a8861cf8250f6f546cfce8d8f57e3a0bad22274914955d281b5388df79192f69
+- task_id: t4-extenso-0002
+  task_version: 1
+  sha256: 575f5cfaf756a32b8fbb4274e84c2222f7e454449bb50aa0d563fd9a74c8ce0a
+- task_id: t4-extenso-0002-en
+  task_version: 1
+  sha256: 3e08b74839146c95ab8029b684e83d653fda7d391c1206fce4262876e21c94af
+- task_id: t4-falta-0001
+  task_version: 1
+  sha256: 5d6f347dc31815268d4c4001afd2e0e7d0204c2530136eed179ad3c001e1850b
+- task_id: t4-falta-0001-en
+  task_version: 1
+  sha256: b4037ff9af2f5f1d2dffeaa72404334ba7d06dbf406d5697166c9a1e19c7e48d
+- task_id: t4-falta-0002
+  task_version: 1
+  sha256: e69a68c08eef2af2574842c887086ac03dfe5439042fd1815194b661acc77361
+- task_id: t4-falta-0002-en
+  task_version: 1
+  sha256: b4f63bb322da205113d4b5d6fe03132c441e836d4becfd291fcf2591f21c360a
+- task_id: t4-referente-0001
+  task_version: 1
+  sha256: 1e570779b869761f9a05632a913159c1049e5c721170b532c9fb9cb530c150fd
+- task_id: t4-referente-0001-en
+  task_version: 1
+  sha256: 5ad0d3da20d1e495b8eb506385a4664a70640db34474f7c4cd8c2aafc45579e0
+- task_id: t4-referente-0002
+  task_version: 1
+  sha256: e2c712992f448e96fedc258d73565f90b320a7dd82719ada66759526d74bb281
+- task_id: t4-referente-0002-en
+  task_version: 1
+  sha256: 01e848cea3ce060317ed1e4c514db46c83a4706cb085c902bf333a0f862c1486
+delta_subset:
+- anafora-0001
+- anafora-0002
+- date-0001
+- date-0002
+- escolha-0001
+- escolha-0002
+- extenso-0001
+- extenso-0002
+- falta-0001
+- falta-0002
+- hora-0001
+- hora-0002
+- ingles-0001
+- ingles-0002
+- ingles-0003
+- irrelevancia-0001
+- irrelevancia-0002
+- money-0001
+- money-0002
+- nomes-0001
+- nomes-0002
+- referente-0001
+- referente-0002
